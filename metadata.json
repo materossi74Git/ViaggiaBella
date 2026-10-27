@@ -1,0 +1,6 @@
+{
+  "name": "Gestione Mezzi Cooperativa",
+  "description": "Applicazione digitale e pannello amministrativo per la gestione, tracciamento e verifica degli utilizzi dei mezzi aziendali della cooperativa.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

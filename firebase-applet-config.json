@@ -1,0 +1,12 @@
+{
+  "projectId": "viaggiabella",
+  "appId": "1:417462021601:web:8431b9e55eaa3e936a36a0",
+  "apiKey": "AIzaSyAulQiZ9jH1-M3vEUG5lGhM46WRR4VlGRw",
+  "authDomain": "viaggiabella.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "viaggiabella.firebasestorage.app",
+  "messagingSenderId": "417462021601",
+  "measurementId": "G-RQVXQDTXBN",
+  "oAuthClientId": "",
+  "recaptchaSiteKey": ""
+}

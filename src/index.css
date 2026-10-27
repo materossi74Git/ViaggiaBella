@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  html {
+    font-family: var(--font-sans);
+    -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Ergonomia e feedback tattile per smartphone */
+  button, a {
+    touch-action: manipulation;
+  }
+}
+
+/* Transizioni fluide e rispetto per prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Classi utility per micro-interazioni */
+.tap-bounce {
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.tap-bounce:active {
+  transform: scale(0.97);
+}

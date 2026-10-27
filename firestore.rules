@@ -1,0 +1,109 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isUser(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'materossi74@gmail.com'
+      );
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Admins registry
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow get: if isUser(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isUser(userId) && (
+        (!('role' in incoming()) || incoming().role == 'operatore' || isAdmin()) &&
+        (!('status' in incoming()) || incoming().status == 'attivo' || isAdmin())
+      );
+      allow update: if (
+        isUser(userId) &&
+        incoming().role == existing().role &&
+        incoming().status == existing().status
+      ) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Vehicles collection
+    match /vehicles/{vehicleId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Vehicle Usages collection
+    match /vehicleUsages/{usageId} {
+      allow get: if isSignedIn() && (existing().driverId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && (incoming().driverId == request.auth.uid || isAdmin());
+      allow update: if isSignedIn() && (
+        isAdmin() || (
+          existing().driverId == request.auth.uid &&
+          incoming().driverId == existing().driverId &&
+          (
+            existing().status == 'in_corso' ||
+            // Se primo salvataggio non esiste o finestra di 30 minuti ancora aperta
+            !('firstSavedAt' in existing()) ||
+            existing().firstSavedAt == null ||
+            // Permetti aggiornamento solo se firstSavedAt rimane immutabile
+            incoming().firstSavedAt == existing().firstSavedAt
+          )
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Correction Requests
+    match /correctionRequests/{requestId} {
+      allow get: if isSignedIn() && (existing().driverId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && (incoming().driverId == request.auth.uid || isAdmin());
+      allow update, delete: if isAdmin();
+    }
+
+    // Immutable Audit Logs: append-only by authenticated user, no update or delete allowed
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Global settings
+    match /appSettings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}
