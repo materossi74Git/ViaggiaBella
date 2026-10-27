@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Radio,
   X,
@@ -126,7 +127,9 @@ export const NfcTagWriterModal: React.FC<NfcTagWriterModalProps> = ({
     setTimeout(() => setCopiedPkg(false), 2500);
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
       onClick={e => {
@@ -435,6 +438,7 @@ export const NfcTagWriterModal: React.FC<NfcTagWriterModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

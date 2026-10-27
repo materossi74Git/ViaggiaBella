@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Smartphone,
   X,
@@ -8,8 +9,12 @@ import {
   Copy,
   ExternalLink,
   ShieldCheck,
-  Cpu,
+  Radio,
   Layers,
+  Sparkles,
+  Info,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 
@@ -24,8 +29,10 @@ export const AndroidAppGuideModal: React.FC<AndroidAppGuideModalProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  const [showStepDetails, setShowStepDetails] = useState(false);
   const currentUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
+  // Genera QR Code per la condivisione istantanea
   useEffect(() => {
     if (isOpen && currentUrl) {
       QRCode.toDataURL(currentUrl, {
@@ -41,7 +48,29 @@ export const AndroidAppGuideModal: React.FC<AndroidAppGuideModalProps> = ({
     }
   }, [isOpen, currentUrl]);
 
-  if (!isOpen) return null;
+  // Blocca lo scroll del body quando la modale è aperta
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
+
+  // Gestione chiusura con tasto ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen || typeof document === 'undefined') return null;
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(currentUrl);
@@ -51,196 +80,234 @@ export const AndroidAppGuideModal: React.FC<AndroidAppGuideModalProps> = ({
 
   const pwaBuilderUrl = `https://www.pwabuilder.com?site=${encodeURIComponent(currentUrl)}`;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden my-6 animate-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-teal-950 p-6 text-white relative">
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
+      onClick={e => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="android-modal-title"
+    >
+      <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
+        {/* Intestazione Principale Chiaro e Pulito */}
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-teal-950 p-5 sm:p-6 text-white relative shrink-0">
           <button
             onClick={onClose}
-            className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-            aria-label="Chiudi"
+            className="absolute top-4 right-4 p-2.5 rounded-2xl text-slate-400 hover:text-white hover:bg-white/10 active:scale-95 transition-all tap-bounce"
+            aria-label="Chiudi finestra guida Android"
           >
             <X className="w-5 h-5" />
           </button>
-          <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-teal-500/20 text-teal-300 text-xs font-bold border border-teal-500/30 mb-2">
+
+          <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-teal-500/20 text-teal-300 text-xs font-bold border border-teal-500/30 mb-2.5">
             <Smartphone className="w-3.5 h-3.5 text-teal-400" />
-            <span>Versione Mobile • Cooperativa Clarabella</span>
+            <span>Guida Installazione • Cooperativa Clarabella</span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-            ViaggiaBella su Smartphone Android
+
+          <h2 id="android-modal-title" className="text-xl sm:text-2xl font-black tracking-tight text-white pr-8">
+            App Android ViaggiaBella
           </h2>
-          <p className="text-xs text-slate-300 mt-1 max-w-lg">
-            Hai a disposizione sia la <strong>Web App accessibile da browser</strong> (perfetta per il backoffice su PC) sia l'<strong>App installabile</strong> per gli autisti.
+          <p className="text-xs sm:text-sm text-slate-300 mt-1.5 max-w-lg leading-relaxed">
+            Scegli come utilizzare l'applicazione sullo smartphone o tablet degli autisti: scaricando direttamente il file <strong>APK nativo</strong> o utilizzandola come <strong>Web App immediata</strong>.
           </p>
         </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto text-slate-700">
-          {/* Opzione 1: Installazione Istantanea PWA (Raccomandata per gli autisti) */}
-          <div className="rounded-2xl border-2 border-teal-500/30 bg-teal-50/40 p-4 sm:p-5 relative overflow-hidden">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <span className="inline-block px-2.5 py-0.5 rounded-md bg-teal-600 text-white text-[10px] font-extrabold uppercase tracking-wider mb-1.5">
-                  Metodo 1 • Più Veloce (Nessun APK da inviare)
-                </span>
-                <h3 className="text-base font-bold text-slate-900 flex items-center gap-1.5">
-                  <span>Installazione Immediata PWA (Progressive Web App)</span>
-                  <ShieldCheck className="w-4 h-4 text-teal-600 shrink-0" />
+        {/* Corpo Contenuto con Scrolling Interno Ottimizzato */}
+        <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1 text-slate-700">
+          {/* Opzione 1: Download Diretto Pacchetto APK (La più richiesta per Android) */}
+          <div className="rounded-2xl border-2 border-teal-500 bg-gradient-to-b from-teal-50/70 to-teal-50/20 p-4 sm:p-5 relative shadow-sm">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-teal-700 text-white text-[10px] font-extrabold uppercase tracking-wider">
+                <Sparkles className="w-3 h-3 text-teal-200" />
+                Opzione 1 • Consigliata per gli Autisti
+              </span>
+              <span className="text-[11px] font-semibold text-teal-800 bg-teal-100/80 px-2 py-0.5 rounded-md">
+                Apertura istantanea NFC
+              </span>
+            </div>
+
+            <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+              <span>Scarica il File APK per Android</span>
+              <ShieldCheck className="w-4 h-4 text-teal-600" />
+            </h3>
+
+            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+              Installando il file APK, quando l'autista tocca con il telefono la scheda NFC sul cruscotto del mezzo, <strong>l'app si apre subito in automatico</strong> con il veicolo selezionato, pronta per inserire i km o iniziare il viaggio!
+            </p>
+
+            {/* Pulsante Download Grande */}
+            <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+              <a
+                href="/viaggiabella.apk"
+                download="ViaggiaBella-Clarabella.apk"
+                className="flex-1 py-3.5 px-5 rounded-2xl bg-teal-700 hover:bg-teal-600 active:scale-98 text-white font-extrabold text-sm shadow-md shadow-teal-700/25 transition-all flex items-center justify-center space-x-2.5 tap-bounce"
+              >
+                <Download className="w-5 h-5 text-teal-200" />
+                <span>Scarica Pacchetto APK (.apk)</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={() => setShowStepDetails(!showStepDetails)}
+                className="px-3.5 py-3 rounded-2xl bg-white border border-teal-300 hover:bg-teal-50 text-teal-900 text-xs font-bold transition-colors flex items-center justify-center space-x-1 tap-bounce"
+              >
+                <span>{showStepDetails ? 'Nascondi passaggi' : 'Come installarlo'}</span>
+                {showStepDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+            </div>
+
+            {/* Dettagli Installazione Guidata in 3 Passi */}
+            {showStepDetails && (
+              <div className="mt-3.5 p-3.5 bg-white rounded-xl border border-teal-200/80 text-xs text-slate-700 space-y-2.5 animate-in fade-in duration-200">
+                <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                  <Info className="w-4 h-4 text-teal-700" />
+                  <span>3 semplici passaggi per installare il file scaricato:</span>
+                </div>
+                <ol className="list-decimal pl-5 space-y-1.5 text-[11px] text-slate-600">
+                  <li>
+                    Tocca <strong>"Scarica Pacchetto APK"</strong>. Al termine del download, tocca la notifica di Android oppure apri la cartella <strong>Download</strong> del telefono.
+                  </li>
+                  <li>
+                    Se compare l'avviso di sicurezza <em>"Installazione da origini sconosciute"</em>, tocca <strong>Impostazioni</strong> e attiva la spunta <strong>"Consenti da questa fonte"</strong>.
+                  </li>
+                  <li>
+                    Tocca <strong>Installa</strong>. L'icona <em>ViaggiaBella</em> compare tra le applicazioni dello smartphone con fotocamera e NFC abilitati.
+                  </li>
+                </ol>
+              </div>
+            )}
+          </div>
+
+          {/* Opzione 2: Installazione Web App (PWA) - Nessun download di file */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5 relative">
+            <span className="inline-block px-2.5 py-0.5 rounded-md bg-slate-800 text-white text-[10px] font-extrabold uppercase tracking-wider mb-2">
+              Opzione 2 • Utilizzo Immediato da Browser (Zero Download)
+            </span>
+
+            <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+              <div className="flex-1">
+                <h3 className="text-base font-extrabold text-slate-900">
+                  Web App Progressiva (PWA)
                 </h3>
                 <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  L'autista apre il link dal browser dello smartphone (Chrome/Samsung Internet) e tocca <strong>"Installa applicazione"</strong>. L'icona <em>ViaggiaBella</em> compare nella schermata delle app, funziona a schermo intero e si aggiorna da sola in tempo reale.
+                  Non vuoi scaricare nessun file APK? Puoi aprire ViaggiaBella direttamente da <strong>Google Chrome</strong> o dal browser dello smartphone.
                 </p>
+                <div className="mt-3 p-3 bg-white rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1">
+                  <p className="font-semibold text-slate-800">
+                    Come salvare l'icona sul telefono dal browser:
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    1. Apri il link con Chrome • 2. Tocca i tre pallini in alto a destra <strong>(⋮)</strong> • 3. Seleziona <strong>"Aggiungi a schermata Home"</strong> o <strong>"Installa app"</strong>.
+                  </p>
+                </div>
+
+                <div className="mt-3.5 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold text-xs shadow-sm transition-all active:scale-95 tap-bounce"
+                  >
+                    {copied ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 text-emerald-600" />
+                        <span className="text-emerald-700">Link Copiato negli Appunti!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 text-slate-600" />
+                        <span>Copia Link per gli Autisti</span>
+                      </>
+                    )}
+                  </button>
+                  <span className="text-[11px] text-slate-500 font-mono bg-white px-2 py-1.5 rounded-lg border border-slate-200 truncate max-w-xs">
+                    {currentUrl}
+                  </span>
+                </div>
               </div>
 
+              {/* QR Code per inquadratura con fotocamera */}
               {qrDataUrl && (
-                <div className="hidden sm:flex flex-col items-center bg-white p-2.5 rounded-xl border border-teal-200 shadow-sm shrink-0">
+                <div className="hidden sm:flex flex-col items-center bg-white p-3 rounded-2xl border border-slate-200 shadow-sm shrink-0">
                   <img src={qrDataUrl} alt="QR Code ViaggiaBella" className="w-24 h-24 rounded-lg" />
-                  <span className="text-[10px] font-bold text-slate-500 mt-1 flex items-center gap-1">
-                    <QrCode className="w-3 h-3" /> Inquadra
+                  <span className="text-[10px] font-bold text-slate-600 mt-1.5 flex items-center gap-1">
+                    <QrCode className="w-3.5 h-3.5 text-teal-600" /> Inquadra col telefono
                   </span>
                 </div>
               )}
             </div>
-
-            <div className="mt-4 pt-3 border-t border-teal-200/60 flex flex-wrap items-center gap-2.5">
-              <button
-                onClick={handleCopyLink}
-                className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-white border border-teal-300 hover:bg-teal-100/50 text-teal-900 font-bold text-xs shadow-sm transition-all active:scale-95"
-              >
-                {copied ? (
-                  <>
-                    <CheckCircle className="w-4 h-4 text-emerald-600" />
-                    <span>Link Copiato!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4 text-teal-700" />
-                    <span>Copia Link per gli Autisti</span>
-                  </>
-                )}
-              </button>
-              <span className="text-[11px] text-slate-500 font-mono bg-white/70 px-2.5 py-1.5 rounded-lg border border-teal-200/50 truncate max-w-xs">
-                {currentUrl}
-              </span>
-            </div>
           </div>
 
-          {/* Opzione 2: Pacchetto APK Standalone per Android */}
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
-            <span className="inline-block px-2.5 py-0.5 rounded-md bg-slate-800 text-white text-[10px] font-extrabold uppercase tracking-wider mb-1.5">
-              Metodo 2 • Pacchetto APK Nativo
-            </span>
-            <h3 className="text-base font-bold text-slate-900 flex items-center gap-1.5">
-              <Cpu className="w-4 h-4 text-indigo-600 shrink-0" />
-              <span>Generazione del Pacchetto APK Android</span>
-            </h3>
-            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-              Il progetto è ora configurato con <strong>Capacitor</strong> e la cartella nativa Android (<code>/android</code>) con package <code>it.coopclarabella.viaggiabella</code>, fotocamera e NFC inclusi.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-              {/* Opzione 2A: Download Diretto APK */}
-              <div className="bg-white p-3.5 rounded-xl border border-teal-200 shadow-sm flex flex-col justify-between">
-                <div>
-                  <div className="font-bold text-xs text-slate-900 flex items-center gap-1">
-                    <Download className="w-3.5 h-3.5 text-teal-600" />
-                    <span>Download Diretto APK Android</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Scarica direttamente il file <code className="font-mono bg-slate-100 px-1 rounded">ViaggiaBella-Clarabella.apk</code> pronto per l'installazione su qualsiasi smartphone Android.
-                  </p>
-                </div>
-                <a
-                  href="/viaggiabella.apk"
-                  download="ViaggiaBella-Clarabella.apk"
-                  className="mt-3 inline-flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl bg-teal-700 hover:bg-teal-600 text-white text-xs font-bold transition-colors tap-bounce"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Scarica File APK (.apk)</span>
-                </a>
-              </div>
-
-              {/* Opzione 2B: PWABuilder (1-Click APK Online) */}
-              <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                <div>
-                  <div className="font-bold text-xs text-slate-900 flex items-center gap-1">
-                    <Layers className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Generazione Online (PWABuilder)</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Genera il pacchetto APK firmato o Google Play Store pronto online in 1 minuto.
-                  </p>
-                </div>
-                <a
-                  href={pwaBuilderUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-3 inline-flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors"
-                >
-                  <span>Genera su PWABuilder</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-                </a>
-              </div>
-            </div>
-          </div>
-
-          {/* Opzione 3: Configurazione Tag NFC per Apertura Automatica e Download */}
+          {/* Opzione 3: Come funziona con le schede NFC sui cruscotti */}
           <div className="rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4 sm:p-5">
-            <span className="inline-block px-2.5 py-0.5 rounded-md bg-indigo-700 text-white text-[10px] font-extrabold uppercase tracking-wider mb-1.5">
-              Automazione NFC • Apertura al Tocco & Download
-            </span>
-            <h3 className="text-base font-bold text-slate-900 flex items-center gap-1.5">
-              <span>Come Scrivere le Schede NFC e Come Funzionano</span>
-            </h3>
-            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-              Acquista normali adesivi NFC (formato <strong>NTAG213, NTAG215 o NTAG216</strong>, costo ~0,50€ l'uno). Puoi scriverli direttamente dalla schermata <strong>Parco Mezzi</strong> cliccando <strong>"Scrivi NFC"</strong> oppure con l'app gratuita <strong>NFC Tools</strong>.
+            <div className="flex items-center space-x-2 text-indigo-900 mb-1.5">
+              <Radio className="w-4 h-4 text-indigo-600 animate-pulse" />
+              <h3 className="font-bold text-sm">
+                Come Funziona con il Tag NFC sul Cruscotto del Mezzo
+              </h3>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Basta avvicinare il retro dello smartphone al bollino o scheda NFC posizionata a bordo veicolo:
             </p>
-            <div className="mt-3 bg-white p-3.5 rounded-xl border border-indigo-100 text-xs space-y-2.5">
-              <div className="flex items-center justify-between text-slate-700">
-                <span className="font-semibold text-slate-900">Formato Universale Scritto sulla Scheda:</span>
-                <span className="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded">URL + AAR</span>
-              </div>
-              <div className="font-mono text-[11px] bg-slate-900 text-indigo-300 p-2 rounded-lg break-all select-all">
-                {currentUrl}/?vehicleId=ID_MEZZO&source=nfc
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px]">
-                <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-950">
-                  <strong>✅ Se l'APK è già installata:</strong>
-                  <p className="mt-0.5 text-emerald-800">
-                    Android lancia all'istante l'app col mezzo selezionato, mostrando subito la scelta <em>"Inizia Viaggio ORA"</em> o <em>"Inserisci Utilizzo manuale"</em>!
-                  </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3 text-xs">
+              <div className="p-3 rounded-xl bg-white border border-emerald-200 text-emerald-950">
+                <div className="font-bold flex items-center gap-1 text-emerald-900 mb-0.5">
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Con l'APK installata:</span>
                 </div>
-                <div className="p-2 rounded-lg bg-teal-50 border border-teal-200 text-teal-950">
-                  <strong>📥 Se l'APK non è installata:</strong>
-                  <p className="mt-0.5 text-teal-800">
-                    Android apre la pagina web chiedendo all'autista se vuole <em>scaricare l'APK</em> oppure <em>proseguire con la modalità Web (PWA)</em>!
-                  </p>
+                <p className="text-[11px] text-slate-600">
+                  Android riconosce la scheda e apre l'applicazione all'istante, con il mezzo selezionato e le scelte per iniziare il viaggio o segnare i km.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-white border border-teal-200 text-teal-950">
+                <div className="font-bold flex items-center gap-1 text-teal-900 mb-0.5">
+                  <Info className="w-3.5 h-3.5 text-teal-600" />
+                  <span>Senza l'APK (solo Web):</span>
                 </div>
+                <p className="text-[11px] text-slate-600">
+                  Android apre la pagina web nel browser, offrendo di scaricare l'APK oppure di proseguire subito via Web.
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Sintesi Architetturale */}
-          <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs">
-            <div className="font-bold flex items-center gap-1.5 text-emerald-900 mb-1">
-              <CheckCircle className="w-4 h-4 text-emerald-600" />
-              <span>Sincronizzazione Unificata al 100%</span>
+          {/* Opzione Avanzata: PWABuilder online */}
+          <div className="p-3.5 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-between text-xs text-slate-600">
+            <div>
+              <span className="font-bold text-slate-800">Strumento Generazione PWABuilder (Avanzato):</span>
+              <p className="text-[11px] text-slate-500">Per generare pacchetti Play Store (.aab / .apk) online con 1 click.</p>
             </div>
-            Sia che gli operatori aprano la <strong>Web App da computer</strong>, installino la <strong>PWA dal browser del cellulare</strong> o installino il <strong>pacchetto APK</strong>, il database Firestore utilizzato è il medesimo: tutti i dati su km, uscite, rientri e scadenze sono sincronizzati all'istante per tutti!
+            <a
+              href={pwaBuilderUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 font-bold text-xs tap-bounce shrink-0"
+            >
+              <Layers className="w-3.5 h-3.5 text-indigo-600" />
+              <span>PWABuilder</span>
+              <ExternalLink className="w-3 h-3 text-slate-400" />
+            </a>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="bg-slate-50 px-6 py-4 border-t border-slate-100 flex items-center justify-end">
+        {/* Footer con pulsante Chiudi chiaro e rassicurante */}
+        <div className="bg-slate-50 px-5 sm:px-6 py-3.5 border-t border-slate-200 flex items-center justify-between shrink-0">
+          <span className="text-[11px] text-slate-500 font-medium">
+            Cooperativa Sociale Clarabella • ViaggiaBella
+          </span>
           <button
+            type="button"
             onClick={onClose}
-            className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-colors"
+            className="px-6 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-bold text-xs shadow-sm transition-all tap-bounce"
           >
-            Chiudi
+            Chiudi Finestra
           </button>
         </div>
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 };
