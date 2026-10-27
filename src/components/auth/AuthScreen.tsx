@@ -86,7 +86,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
       onAuthSuccess(user);
     } catch (err: any) {
       console.error('Errore Google Sign-In:', err);
-      setErrorMsg(err?.message || 'Accesso con Google annullato o non riuscito.');
+      const msg = err?.message || String(err);
+      if (msg.includes('auth/unauthorized-domain')) {
+        const domain = typeof window !== 'undefined' ? window.location.hostname : 'viaggiabella.vercel.app';
+        setErrorMsg(
+          `Dominio non ancora autorizzato su Firebase (${domain}). Vai nella console Firebase → Authentication → Impostazioni → Domini autorizzati e aggiungi: ${domain}`
+        );
+      } else {
+        setErrorMsg(msg || 'Accesso con Google annullato o non riuscito.');
+      }
     } finally {
       setIsSubmitting(false);
     }
