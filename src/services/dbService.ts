@@ -10,6 +10,7 @@ import {
   where,
   orderBy,
   onSnapshot,
+  runTransaction,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import {
@@ -156,12 +157,54 @@ export function subscribeUsages(
 
 /**
  * Controlla se il veicolo ha un viaggio attualmente in corso.
+ * Legge direttamente lo stato atomico del veicolo (/vehicles/{vehicleId}) e,
+ * se presente, recupera il documento del viaggio attivo.
  */
 export async function getOngoingTripForVehicle(
   vehicleId: string,
   excludeUsageId?: string
 ): Promise<VehicleUsage | null> {
   try {
+    // 1. Verifica prima dal documento veicolo (accessibile a tutti gli operatori autenticati)
+    const vSnap = await getDoc(doc(db, 'vehicles', vehicleId));
+    if (vSnap.exists()) {
+      const vData = vSnap.data() as Vehicle;
+      if (vData.activeTripId && vData.activeTripId !== excludeUsageId) {
+        try {
+          const uSnap = await getDoc(doc(db, 'vehicleUsages', vData.activeTripId));
+          if (uSnap.exists()) {
+            const u = uSnap.data() as VehicleUsage;
+            if (u.status === 'in_corso') {
+              return u;
+            }
+          }
+        } catch {
+          // Se la regola di lettura di vehicleUsages impedisce la lettura completa (es. altro guidatore),
+          // restituiamo un oggetto sintetico sicuro basato sul veicolo per prevenire conflitti
+          return {
+            id: vData.activeTripId,
+            vehicleId: vData.id,
+            vehicleName: vData.name,
+            vehiclePlate: vData.plate,
+            driverId: vData.activeDriverId || '',
+            driverName: vData.activeDriverName || 'Altro operatore',
+            usageDate: new Date().toISOString().split('T')[0],
+            startTime: '',
+            destination: '',
+            reason: '',
+            startKm: vData.currentKm || 0,
+            status: 'in_corso',
+            mode: 'pulsanti',
+            createdAt: vData.updatedAt || new Date().toISOString(),
+            updatedAt: vData.updatedAt || new Date().toISOString(),
+            lastModifiedBy: '',
+            lastModifiedByName: '',
+          };
+        }
+      }
+    }
+
+    // 2. Fallback su query per compatibilità con dati storici
     const q = query(
       collection(db, 'vehicleUsages'),
       where('vehicleId', '==', vehicleId),
@@ -173,7 +216,8 @@ export async function getOngoingTripForVehicle(
       .filter(u => u.id !== excludeUsageId);
     return docs.length > 0 ? docs[0] : null;
   } catch (error) {
-    handleFirestoreError(error, OperationType.GET, 'vehicleUsages');
+    // Non interrompere il flusso se la query globale viene ristretta dalle regole ABAC
+    return null;
   }
 }
 
@@ -196,6 +240,12 @@ export async function getOngoingTripForDriver(driverId: string): Promise<Vehicle
 
 /**
  * Avvia un nuovo viaggio in MODALITÀ B (Pulsante INIZIA UTILIZZO)
+ * ESEGUE UNA TRANSAZIONE ATOMICA SU FIRESTORE:
+ * 1. Legge il veicolo verificando che esista e che status == 'attivo'.
+ * 2. Verifica che il mezzo NON sia già impegnato (isOccupied != true e activeTripId nullo).
+ * 3. Crea il record in vehicleUsages con status: 'in_corso'.
+ * 4. Blocca il mezzo impostando isOccupied: true, activeTripId, activeDriverId, activeDriverName.
+ * Impedisce matematicamente doppie aperture concorrenti anche con clic simultanei di più operatori.
  */
 export async function startTripWithButtons(
   params: {
@@ -209,12 +259,12 @@ export async function startTripWithButtons(
 ): Promise<VehicleUsage> {
   const { vehicle, driver, destination, reason, startKm, notes } = params;
 
-  // Verifica se esiste già un viaggio aperto per lo stesso veicolo
-  const existingActive = await getOngoingTripForVehicle(vehicle.id);
-  if (existingActive) {
-    throw new Error(
-      `Attenzione: il mezzo ${vehicle.name} (${vehicle.plate}) risulta già in uso da ${existingActive.driverName}. Concludere il viaggio precedente prima di avviarne uno nuovo.`
-    );
+  if (!driver || !driver.uid) {
+    throw new Error('Operatore non autenticato. Effettua l\'accesso prima di iniziare.');
+  }
+
+  if (driver.status === 'revocato') {
+    throw new Error('Utenza non autorizzata o revocata.');
   }
 
   const now = new Date();
@@ -225,30 +275,64 @@ export async function startTripWithButtons(
   const startTimeStr = `${hours}:${minutes}`;
   const usageDateStr = nowIso.split('T')[0];
 
-  const newUsage: VehicleUsage = {
-    id: usageId,
-    vehicleId: vehicle.id,
-    vehicleName: vehicle.name,
-    vehiclePlate: vehicle.plate,
-    driverId: driver.uid,
-    driverName: driver.displayName,
-    usageDate: usageDateStr,
-    startTime: startTimeStr,
-    destination: destination.trim(),
-    reason: reason.trim(),
-    startKm,
-    notes: notes?.trim() || '',
-    status: 'in_corso',
-    mode: 'pulsanti',
-    startRealTimestamp: nowIso,
-    createdAt: nowIso,
-    updatedAt: nowIso,
-    lastModifiedBy: driver.uid,
-    lastModifiedByName: driver.displayName,
-  };
+  const vehicleRef = doc(db, 'vehicles', vehicle.id);
+  const usageRef = doc(db, 'vehicleUsages', usageId);
 
   try {
-    await setDoc(doc(db, 'vehicleUsages', usageId), newUsage);
+    const createdUsage = await runTransaction(db, async (transaction) => {
+      // 1. Lettura atomica del mezzo
+      const vehicleSnap = await transaction.get(vehicleRef);
+      if (!vehicleSnap.exists()) {
+        throw new Error(`Il veicolo "${vehicle.name}" (${vehicle.plate}) non è stato trovato nel database.`);
+      }
+
+      const vehicleData = vehicleSnap.data() as Vehicle;
+
+      // 2. Controllo stato attivo
+      if (vehicleData.status === 'inattivo') {
+        throw new Error(`Il veicolo ${vehicleData.name} (${vehicleData.plate}) risulta disattivato o fuori servizio. Impossibile avviare il viaggio.`);
+      }
+
+      // 3. Controllo atomico occupazione veicolo
+      if (vehicleData.isOccupied || (vehicleData.activeTripId && vehicleData.activeTripId.trim() !== '')) {
+        const busyBy = vehicleData.activeDriverName || 'un altro operatore';
+        throw new Error(`Attenzione: il mezzo ${vehicleData.name} (${vehicleData.plate}) risulta già impegnato in un viaggio attivo con ${busyBy}. Concludere il viaggio precedente prima di avviarne uno nuovo.`);
+      }
+
+      const newUsage: VehicleUsage = {
+        id: usageId,
+        vehicleId: vehicleData.id,
+        vehicleName: vehicleData.name,
+        vehiclePlate: vehicleData.plate,
+        driverId: driver.uid,
+        driverName: driver.displayName,
+        usageDate: usageDateStr,
+        startTime: startTimeStr,
+        destination: destination.trim(),
+        reason: reason.trim(),
+        startKm: Math.max(0, startKm),
+        notes: notes?.trim() || '',
+        status: 'in_corso',
+        mode: 'pulsanti',
+        startRealTimestamp: nowIso,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        lastModifiedBy: driver.uid,
+        lastModifiedByName: driver.displayName,
+      };
+
+      // 4. Scrittura atomica combinata di viaggio e stato veicolo
+      transaction.set(usageRef, newUsage);
+      transaction.update(vehicleRef, {
+        isOccupied: true,
+        activeTripId: usageId,
+        activeDriverId: driver.uid,
+        activeDriverName: driver.displayName,
+        updatedAt: nowIso,
+      });
+
+      return newUsage;
+    });
 
     await logAuditEvent({
       usageId,
@@ -256,18 +340,32 @@ export async function startTripWithButtons(
       userName: driver.displayName,
       userRole: driver.role,
       actionType: 'creazione',
-      summary: `Inizio viaggio con pulsanti: ${vehicle.name} - Destinazione: ${destination}`,
-      newValues: JSON.stringify(newUsage),
+      summary: `Inizio viaggio con pulsanti (atomico): ${vehicle.name} (${vehicle.plate}) - Destinazione: ${destination}`,
+      newValues: JSON.stringify(createdUsage),
     });
 
-    return newUsage;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, `vehicleUsages/${usageId}`);
+    return createdUsage;
+  } catch (error: any) {
+    if (error?.message && (
+      error.message.includes('risulta già impegnato') ||
+      error.message.includes('disattivato') ||
+      error.message.includes('non è stato trovato')
+    )) {
+      throw error;
+    }
+    handleFirestoreError(error, OperationType.WRITE, `vehicleUsages/${usageId}`);
   }
 }
 
 /**
  * Conclude un viaggio in corso in MODALITÀ B (Pulsante TERMINA UTILIZZO)
+ * ESEGUE UNA TRANSAZIONE ATOMICA SU FIRESTORE:
+ * 1. Legge il viaggio e il veicolo.
+ * 2. Verifica che il viaggio sia effettivamente 'in_corso' (previene doppi clic).
+ * 3. Verifica autorizzazione (operatore conducente o amministratore).
+ * 4. Valida endKm >= startKm.
+ * 5. Imposta status: 'completato', orario, km e distanza.
+ * 6. Aggiorna i km del mezzo e rilascia l'occupazione (isOccupied: false, activeTripId: null).
  */
 export async function finishTripWithButtons(
   params: {
@@ -292,30 +390,76 @@ export async function finishTripWithButtons(
   const endTimeStr = `${hours}:${minutes}`;
   const distance = Math.max(0, endKm - usage.startKm);
 
-  const updatedUsage: VehicleUsage = {
-    ...usage,
-    status: 'completato',
-    endTime: endTimeStr,
-    endRealTimestamp: nowIso,
-    endKm,
-    distanceKm: distance,
-    destination: destination ? destination.trim() : usage.destination,
-    reason: reason ? reason.trim() : usage.reason,
-    notes: notes !== undefined ? notes.trim() : usage.notes,
-    firstSavedAt: usage.firstSavedAt || nowIso, // Fissa l'inizio della finestra dei 30 minuti
-    updatedAt: nowIso,
-    lastModifiedBy: user.uid,
-    lastModifiedByName: user.displayName,
-  };
+  const usageRef = doc(db, 'vehicleUsages', usage.id);
+  const vehicleRef = doc(db, 'vehicles', usage.vehicleId);
 
   try {
-    await setDoc(doc(db, 'vehicleUsages', usage.id), updatedUsage);
+    const updatedUsage = await runTransaction(db, async (transaction) => {
+      // 1. Letture atomiche preliminari (TUTTE le letture devono precedere qualsiasi operazione di scrittura)
+      const usageSnap = await transaction.get(usageRef);
+      if (!usageSnap.exists()) {
+        throw new Error('Il viaggio specificato non esiste o è stato rimosso.');
+      }
 
-    // Aggiorna anche il chilometraggio corrente del veicolo
-    await updateDoc(doc(db, 'vehicles', usage.vehicleId), {
-      currentKm: endKm,
-      updatedAt: nowIso,
-    }).catch(err => console.warn('Aggiornamento km veicolo non critico:', err));
+      const vehicleSnap = await transaction.get(vehicleRef);
+      if (!vehicleSnap.exists()) {
+        throw new Error('Il veicolo associato al viaggio non è stato trovato.');
+      }
+
+      const existingUsage = usageSnap.data() as VehicleUsage;
+      const vehicleData = vehicleSnap.data() as Vehicle;
+
+      // 2. Prevenzione doppia conclusione
+      if (existingUsage.status !== 'in_corso') {
+        throw new Error('Questo viaggio risulta già concluso.');
+      }
+
+      // 3. Verifica autorizzazione (solo conducente o amministratore)
+      if (user.role !== 'amministratore' && existingUsage.driverId !== user.uid) {
+        throw new Error('Non sei autorizzato a concludere il viaggio di un altro operatore.');
+      }
+
+      // 4. Validazione chilometri (endKm non inferiore a startKm del viaggio)
+      if (endKm < existingUsage.startKm) {
+        throw new Error(`I chilometri finali (${endKm}) non possono essere inferiori a quelli iniziali (${existingUsage.startKm}).`);
+      }
+
+      // 5. Coerenza tra viaggio e veicolo
+      if (existingUsage.vehicleId !== vehicleData.id) {
+        throw new Error('Incongruenza tra il veicolo registrato nel viaggio e il veicolo nel database.');
+      }
+
+      const completedUsage: VehicleUsage = {
+        ...existingUsage,
+        status: 'completato',
+        endTime: endTimeStr,
+        endRealTimestamp: nowIso,
+        endKm,
+        distanceKm: Math.max(0, endKm - existingUsage.startKm),
+        destination: destination ? destination.trim() : existingUsage.destination,
+        reason: reason ? reason.trim() : existingUsage.reason,
+        notes: notes !== undefined ? notes.trim() : existingUsage.notes,
+        firstSavedAt: existingUsage.firstSavedAt || nowIso,
+        updatedAt: nowIso,
+        lastModifiedBy: user.uid,
+        lastModifiedByName: user.displayName,
+      };
+
+      const newKm = Math.max(vehicleData.currentKm || 0, endKm);
+
+      // 6. Scritture atomiche (eseguite SOLO DOPO che tutte le letture e validazioni sono completate)
+      transaction.set(usageRef, completedUsage);
+      transaction.update(vehicleRef, {
+        currentKm: newKm,
+        isOccupied: false,
+        activeTripId: null,
+        activeDriverId: null,
+        activeDriverName: null,
+        updatedAt: nowIso,
+      });
+
+      return completedUsage;
+    });
 
     await logAuditEvent({
       usageId: usage.id,
@@ -323,13 +467,23 @@ export async function finishTripWithButtons(
       userName: user.displayName,
       userRole: user.role,
       actionType: 'completamento',
-      summary: `Viaggio concluso: ${usage.vehicleName} - Percorsi ${distance} km`,
+      summary: `Viaggio concluso (atomico): ${usage.vehicleName} - Percorsi ${distance} km (Km finali: ${endKm})`,
       previousValues: JSON.stringify(usage),
       newValues: JSON.stringify(updatedUsage),
     });
 
     return updatedUsage;
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message && (
+      error.message.includes('già concluso') ||
+      error.message.includes('non possono essere inferiori') ||
+      error.message.includes('Non sei autorizzato') ||
+      error.message.includes('non esiste') ||
+      error.message.includes('non è stato trovato') ||
+      error.message.includes('Incongruenza')
+    )) {
+      throw error;
+    }
     handleFirestoreError(error, OperationType.UPDATE, `vehicleUsages/${usage.id}`);
   }
 }
@@ -394,10 +548,25 @@ export async function saveManualUsage(
     await setDoc(doc(db, 'vehicleUsages', usageId), fullUsage);
 
     if (endKm !== undefined && usage.vehicleId) {
-      await updateDoc(doc(db, 'vehicles', usage.vehicleId), {
-        currentKm: endKm,
-        updatedAt: nowIso,
-      }).catch(err => console.warn('Aggiornamento km veicolo non critico:', err));
+      try {
+        const vSnap = await getDoc(doc(db, 'vehicles', usage.vehicleId));
+        if (vSnap.exists()) {
+          const vData = vSnap.data() as Vehicle;
+          const newKm = Math.max(vData.currentKm || 0, endKm);
+          await updateDoc(doc(db, 'vehicles', usage.vehicleId), {
+            currentKm: newKm,
+            ...(isCompleted && vData.activeTripId === usageId ? {
+              isOccupied: false,
+              activeTripId: null,
+              activeDriverId: null,
+              activeDriverName: null,
+            } : {}),
+            updatedAt: nowIso,
+          });
+        }
+      } catch (err) {
+        console.warn('Aggiornamento km veicolo da inserimento manuale:', err);
+      }
     }
 
     await logAuditEvent({

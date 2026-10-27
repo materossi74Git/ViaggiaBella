@@ -56,15 +56,21 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
     const v = vehicles.find(item => item.id === selectedVehicleId);
     if (v) {
       setStartKm(v.currentKm || 0);
-      getOngoingTripForVehicle(v.id).then(ongoing => {
-        if (ongoing) {
-          setActiveConflict(
-            `Attenzione: ${v.name} risulta già in viaggio con il conducente ${ongoing.driverName}.`
-          );
-        } else {
-          setActiveConflict(null);
-        }
-      });
+      if (v.isOccupied || (v.activeTripId && v.activeTripId.trim() !== '')) {
+        setActiveConflict(
+          `Attenzione: ${v.name} risulta già in viaggio con il conducente ${v.activeDriverName || 'un altro operatore'}.`
+        );
+      } else {
+        getOngoingTripForVehicle(v.id).then(ongoing => {
+          if (ongoing) {
+            setActiveConflict(
+              `Attenzione: ${v.name} risulta già in viaggio con il conducente ${ongoing.driverName}.`
+            );
+          } else {
+            setActiveConflict(null);
+          }
+        });
+      }
     }
   }, [selectedVehicleId, vehicles]);
 

@@ -13,6 +13,7 @@ import {
 } from './services/dbService';
 import { ensureInitialFleet } from './services/seedService';
 import { getFleetExpiryAlerts } from './services/expirationService';
+import { parseVehicleIdentifier } from './services/nfcService';
 
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
@@ -195,51 +196,54 @@ export default function App() {
     if (vehicles.length === 0) return;
 
     const identifyAndOpenVehicle = (rawIdentifier: string, isFromNativeUrl: boolean = false) => {
-      let target = decodeURIComponent(rawIdentifier.trim());
-      let detectedSource: 'nfc' | 'qr' | 'manual' = 'nfc';
+      const { vehicleId: target, source: detectedSource } = parseVehicleIdentifier(rawIdentifier);
+      if (!target) return;
 
-      if (target.includes('source=qr') || target.includes('qr=')) {
-        detectedSource = 'qr';
-      }
-
-      if (target.includes('vehicleId=')) {
-        const match = target.match(/vehicleId=([^&]+)/);
-        if (match) target = match[1];
-      } else if (target.includes('qr=')) {
-        const match = target.match(/qr=([^&]+)/);
-        if (match) target = match[1];
-      } else if (target.includes('nfc=')) {
-        const match = target.match(/nfc=([^&]+)/);
-        if (match) target = match[1];
-      } else if (target.startsWith('viaggiabella://vehicle/')) {
-        target = target.replace('viaggiabella://vehicle/', '');
-      } else if (target.startsWith('viaggiabella://')) {
-        target = target.replace('viaggiabella://', '');
-      }
-
+      const cleanTarget = target.replace(/\s+/g, '').toUpperCase();
       const found = vehicles.find(
         v =>
           v.id === target ||
           v.qrCodeId === target ||
           v.nfcTagId === target ||
-          v.plate.replace(/\s+/g, '').toUpperCase() === target.replace(/\s+/g, '').toUpperCase()
+          v.plate.replace(/\s+/g, '').toUpperCase() === cleanTarget
       );
 
+      // Pulisci l'URL per evitare riesecuzioni su refresh o navigazione interna
+      if (typeof window !== 'undefined' && window.location.search) {
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+
       if (found) {
+        if (found.status === 'inattivo') {
+          addToast(
+            'warning',
+            'Mezzo Fuori Servizio',
+            `Il veicolo ${found.name} (${found.plate}) è attualmente contrassegnato come fuori servizio/inattivo.`
+          );
+          return;
+        }
+
         setTargetVehicle(found);
         setIdentifiedVia(detectedSource);
 
         const isNative = Capacitor.isNativePlatform() || isFromNativeUrl;
         const alreadyChoseWeb = sessionStorage.getItem('preferred_web_mode') === 'true';
 
-        if (!isNative && !alreadyChoseWeb) {
-          // L'utente legge la scheda dal browser: chiedi se scaricare l'APK o proseguire via Web (PWA)
+        // Mostra la modale di benvenuto/download APK SOLO per NFC su browser web non ancora configurato
+        if (detectedSource === 'nfc' && !isNative && !alreadyChoseWeb) {
           setNfcWelcomeModalOpen(true);
         } else {
-          // Con l'APK installata: si apre subito l'app con il mezzo selezionato e le scelte "Inizia Viaggio" o "Inserisci Utilizzo"
+          // Da QR Code o con APK installata: si apre direttamente la scelta Inizia Viaggio / Inserisci Utilizzo
           setVehicleActionModalOpen(true);
           addToast('success', 'Mezzo Identificato', `${found.name} (${found.plate}) pronto per il servizio.`);
         }
+      } else {
+        addToast(
+          'warning',
+          'Mezzo Non Trovato',
+          `Nessun veicolo della flotta corrisponde all'identificativo letto: "${target}".`
+        );
       }
     };
 

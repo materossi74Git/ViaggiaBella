@@ -47,17 +47,83 @@ export function checkNfcSupport(): NfcSupportStatus {
   };
 }
 
+export const OFFICIAL_DOMAIN = 'https://viaggiabella.vercel.app';
+
 /**
- * Genera l'URL universale da programmare sul tag NFC o QR code.
- * Quando un utente tocca la scheda:
+ * Genera l'URL universale ufficiale da programmare sul tag NFC o QR code.
+ * Il dominio di riferimento ufficiale è https://viaggiabella.vercel.app/
+ * Quando un utente tocca la scheda o inquadra il QR:
  * - Se ha l'APK installata, Android lancia subito l'app.
- * - Se non ha l'APK, apre la pagina web chiedendo se vuole scaricarla o proseguire in modalità PWA.
+ * - Se non ha l'APK, apre la PWA/sito HTTPS ufficiale su Vercel.
  */
 export function getVehicleNfcUrl(vehicleId: string, customOrigin?: string): string {
-  const origin =
-    customOrigin ||
-    (typeof window !== 'undefined' ? window.location.origin : 'https://ais-pre-pnx3ml3kq6jkfy7r2hlltb-258029693457.europe-west1.run.app');
-  return `${origin}/?vehicleId=${encodeURIComponent(vehicleId)}&source=nfc`;
+  // Se specificato esplicitamente un customOrigin, usalo; altrimenti usa il dominio ufficiale Vercel
+  const origin = (customOrigin || OFFICIAL_DOMAIN).replace(/\/+$/, '');
+  return `${origin}/?vehicleId=${encodeURIComponent(vehicleId.trim())}&source=nfc`;
+}
+
+/**
+ * Genera l'URL universale per i codici QR cartacei stampabili.
+ */
+export function getVehicleQrUrl(vehicleId: string, customOrigin?: string): string {
+  const origin = (customOrigin || OFFICIAL_DOMAIN).replace(/\/+$/, '');
+  return `${origin}/?vehicleId=${encodeURIComponent(vehicleId.trim())}&source=qr`;
+}
+
+/**
+ * Analizza e normalizza in sicurezza un testo, link o payload letto da QR / NFC / URL.
+ * Riconosce formati:
+ * - https://viaggiabella.vercel.app/?vehicleId=...
+ * - https://.../?qr=... o nfc=...
+ * - viaggiabella://vehicle/... o viaggiabella://...
+ * - Codici ID grezzi (es. veh_ducato_01, coop-veh-01, nfc-ducato-01, FS 123 AB)
+ */
+export function parseVehicleIdentifier(rawInput: string): {
+  vehicleId: string;
+  source: 'nfc' | 'qr' | 'manual';
+  rawInput: string;
+} {
+  if (!rawInput || typeof rawInput !== 'string') {
+    return { vehicleId: '', source: 'manual', rawInput: '' };
+  }
+
+  let text = decodeURIComponent(rawInput.trim());
+  let detectedSource: 'nfc' | 'qr' | 'manual' = 'manual';
+
+  if (text.includes('source=nfc') || text.includes('nfc=')) {
+    detectedSource = 'nfc';
+  } else if (text.includes('source=qr') || text.includes('qr=')) {
+    detectedSource = 'qr';
+  }
+
+  if (text.includes('vehicleId=')) {
+    const match = text.match(/[?&]vehicleId=([^&#]+)/);
+    if (match) {
+      text = match[1];
+    }
+  } else if (text.includes('qr=')) {
+    const match = text.match(/[?&]qr=([^&#]+)/);
+    if (match) {
+      text = match[1];
+      detectedSource = 'qr';
+    }
+  } else if (text.includes('nfc=')) {
+    const match = text.match(/[?&]nfc=([^&#]+)/);
+    if (match) {
+      text = match[1];
+      detectedSource = 'nfc';
+    }
+  } else if (text.startsWith('viaggiabella://vehicle/')) {
+    text = text.replace('viaggiabella://vehicle/', '');
+  } else if (text.startsWith('viaggiabella://')) {
+    text = text.replace('viaggiabella://', '');
+  }
+
+  return {
+    vehicleId: text.trim(),
+    source: detectedSource,
+    rawInput,
+  };
 }
 
 /**

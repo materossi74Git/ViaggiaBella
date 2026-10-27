@@ -137,6 +137,17 @@ const manifestXml = `<?xml version="1.0" encoding="utf-8"?>
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="viaggiabella" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="https" android:host="viaggiabella.vercel.app" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="viaggiabella.vercel.app" />
+            </intent-filter>
         </activity>
     </application>
 </manifest>`;

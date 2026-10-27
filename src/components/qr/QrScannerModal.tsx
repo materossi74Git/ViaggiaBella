@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Html5Qrcode } from 'html5-qrcode';
 import { Camera, X, RefreshCw, AlertTriangle, CheckCircle2, Radio } from 'lucide-react';
 import { Vehicle } from '../../types';
+import { parseVehicleIdentifier } from '../../services/nfcService';
 
 interface QrScannerModalProps {
   isOpen: boolean;
@@ -22,12 +24,17 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
   const [identifiedVehicle, setIdentifiedVehicle] = useState<Vehicle | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const isProcessingRef = useRef<boolean>(false);
   const readerElementId = 'qr-camera-stream';
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      isProcessingRef.current = false;
+      return;
+    }
 
     let isMounted = true;
+    isProcessingRef.current = false;
     setIsInitializing(true);
     setErrorMsg(null);
     setIdentifiedVehicle(null);
@@ -47,7 +54,7 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
           { facingMode: 'environment' },
           config,
           (decodedText: string) => {
-            if (!isMounted) return;
+            if (!isMounted || isProcessingRef.current) return;
             handleDecodedText(decodedText);
           },
           () => {
@@ -82,7 +89,7 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
         ndef.scan({ signal: nfcAbortController.signal })
           .then(() => {
             ndef.onreading = (event: any) => {
-              if (!isMounted) return;
+              if (!isMounted || isProcessingRef.current) return;
               let tagData = event.serialNumber || '';
               if (event.message?.records) {
                 for (const record of event.message.records) {
@@ -110,6 +117,7 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
 
     return () => {
       isMounted = false;
+      isProcessingRef.current = false;
       clearTimeout(timer);
       if (nfcAbortController) {
         try {
@@ -126,35 +134,32 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
   }, [isOpen]);
 
   const handleDecodedText = (text: string) => {
-    // Il codice può contenere l'ID del veicolo, il qrCodeId, nfcTagId o un URL/Deep Link
-    let target = text.trim();
-    if (target.includes('vehicleId=')) {
-      const match = target.match(/vehicleId=([^&]+)/);
-      if (match) target = match[1];
-    } else if (target.includes('qr=')) {
-      const match = target.match(/qr=([^&]+)/);
-      if (match) target = match[1];
-    } else if (target.includes('nfc=')) {
-      const match = target.match(/nfc=([^&]+)/);
-      if (match) target = match[1];
-    } else if (target.startsWith('viaggiabella://vehicle/')) {
-      target = target.replace('viaggiabella://vehicle/', '');
-    } else if (target.startsWith('viaggiabella://')) {
-      target = target.replace('viaggiabella://', '');
-    }
+    if (isProcessingRef.current) return;
 
-    // Cerca veicolo corrispondente
+    const { vehicleId: target } = parseVehicleIdentifier(text);
+    if (!target) return;
+
+    const cleanTarget = target.replace(/\s+/g, '').toUpperCase();
+
+    // Cerca veicolo corrispondente nella flotta
     const found = vehicles.find(
       v =>
         v.id === target ||
         v.qrCodeId === target ||
         v.nfcTagId === target ||
-        v.plate.replace(/\s+/g, '').toUpperCase() === target.replace(/\s+/g, '').toUpperCase()
+        v.plate.replace(/\s+/g, '').toUpperCase() === cleanTarget
     );
 
     if (found) {
+      // Controllo veicolo inattivo
+      if (found.status === 'inattivo') {
+        setErrorMsg(`Il veicolo "${found.name}" (${found.plate}) risulta fuori servizio/inattivo. Impossibile avviare un nuovo viaggio.`);
+        return;
+      }
+
+      isProcessingRef.current = true;
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        navigator.vibrate(100);
+        try { navigator.vibrate(100); } catch {}
       }
       setIdentifiedVehicle(found);
       if (scannerRef.current) {
@@ -182,7 +187,9 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
       onClick={e => {
@@ -268,6 +275,7 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

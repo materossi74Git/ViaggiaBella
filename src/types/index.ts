@@ -34,6 +34,10 @@ export interface Vehicle {
   inspectionExpiry?: string; // YYYY-MM-DD
   inspectionNotes?: string;
   notes?: string;
+  activeTripId?: string | null; // ID del viaggio attualmente in corso
+  activeDriverId?: string | null; // UID del conducente attualmente in servizio
+  activeDriverName?: string | null; // Nome del conducente attualmente in servizio
+  isOccupied?: boolean; // True se il mezzo è attualmente in uso
   createdAt: string;
   updatedAt: string;
 }

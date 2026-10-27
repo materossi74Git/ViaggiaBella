@@ -23,6 +23,7 @@ import { saveVehicle, deleteVehicle } from '../../services/dbService';
 import { evaluateExpiry, evaluateVehicleAlerts, getFleetExpiryAlerts } from '../../services/expirationService';
 import { ExpiryAlertsBanner } from './ExpiryAlertsBanner';
 import { NfcTagWriterModal } from '../nfc/NfcTagWriterModal';
+import { getVehicleQrUrl, OFFICIAL_DOMAIN } from '../../services/nfcService';
 
 interface VehiclesManagerProps {
   vehicles: Vehicle[];
@@ -164,8 +165,9 @@ export const VehiclesManager: React.FC<VehiclesManagerProps> = ({ vehicles, admi
   const openQrBadge = async (v: Vehicle) => {
     setQrModalVehicle(v);
     try {
-      const url = await QRCode.toDataURL(v.qrCodeId, {
-        width: 300,
+      const targetUrl = getVehicleQrUrl(v.id);
+      const url = await QRCode.toDataURL(targetUrl, {
+        width: 320,
         margin: 2,
         color: { dark: '#0f172a', light: '#ffffff' },
       });

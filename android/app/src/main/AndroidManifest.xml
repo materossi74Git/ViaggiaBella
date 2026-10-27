@@ -37,7 +37,13 @@
                 <data android:scheme="viaggiabella" />
             </intent-filter>
 
-            <!-- NFC NDEF Auto-Launch Intent Filter (URL HTTPS su Cloud Run) -->
+            <!-- NFC NDEF Auto-Launch Intent Filter (URL HTTPS su Vercel e Cloud Run) -->
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="https" android:host="viaggiabella.vercel.app" />
+            </intent-filter>
+
             <intent-filter>
                 <action android:name="android.nfc.action.NDEF_DISCOVERED" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -55,6 +61,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="viaggiabella.vercel.app" />
                 <data android:scheme="https" android:host="ais-pre-pnx3ml3kq6jkfy7r2hlltb-258029693457.europe-west1.run.app" />
                 <data android:scheme="https" android:host="ais-dev-pnx3ml3kq6jkfy7r2hlltb-258029693457.europe-west1.run.app" />
             </intent-filter>

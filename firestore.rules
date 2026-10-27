@@ -59,14 +59,26 @@ service cloud.firestore {
 
     // Vehicles collection
     match /vehicles/{vehicleId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow get, list: if isSignedIn();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        // Un operatore può aggiornare atomicamente solo lo stato di viaggio e contachilometri
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'activeTripId', 'activeDriverId', 'activeDriverName', 'isOccupied', 'currentKm', 'updatedAt'
+        ]) &&
+        incoming().id == existing().id &&
+        incoming().plate == existing().plate &&
+        incoming().name == existing().name &&
+        incoming().status == existing().status
+      );
     }
 
     // Vehicle Usages collection
     match /vehicleUsages/{usageId} {
       allow get: if isSignedIn() && (existing().driverId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn();
+      // Gli operatori possono interrogare solo i propri viaggi; gli admin possono interrogare l'intera flotta
+      allow list: if isAdmin() || (isSignedIn() && resource.data.driverId == request.auth.uid);
       allow create: if isSignedIn() && (incoming().driverId == request.auth.uid || isAdmin());
       allow update: if isSignedIn() && (
         isAdmin() || (
@@ -88,7 +100,8 @@ service cloud.firestore {
     // Correction Requests
     match /correctionRequests/{requestId} {
       allow get: if isSignedIn() && (existing().driverId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn();
+      // Gli operatori possono visualizzare in elenco solo le proprie richieste; gli admin tutte
+      allow list: if isAdmin() || (isSignedIn() && resource.data.driverId == request.auth.uid);
       allow create: if isSignedIn() && (incoming().driverId == request.auth.uid || isAdmin());
       allow update, delete: if isAdmin();
     }
