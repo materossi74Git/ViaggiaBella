@@ -1,6 +1,7 @@
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   signOut,
   onAuthStateChanged,
   GoogleAuthProvider,
@@ -124,6 +125,16 @@ export async function loginWithGoogle(): Promise<AppUser> {
   provider.setCustomParameters({ prompt: 'select_account' });
   const cred = await signInWithPopup(auth, provider);
   return await syncUserProfile(cred.user);
+}
+
+/**
+ * Invia email per recuperare la password
+ */
+export async function resetPassword(email: string): Promise<void> {
+  if (!email || !email.includes('@')) {
+    throw new Error('Inserisci un indirizzo email valido.');
+  }
+  await sendPasswordResetEmail(auth, email.trim());
 }
 
 /**

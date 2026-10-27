@@ -10,11 +10,14 @@ import {
   ExternalLink,
   CheckCircle2,
   HelpCircle,
+  Copy,
+  Check,
 } from 'lucide-react';
 import {
   loginWithEmail,
   registerWithEmail,
   loginWithGoogle,
+  resetPassword,
   ADMIN_EMAIL_BOOTSTRAP,
 } from '../../services/authService';
 import { AppUser } from '../../types';
@@ -26,11 +29,14 @@ interface AuthScreenProps {
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
   const [isRegistering, setIsRegistering] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [infoMsg, setInfoMsg] = useState<string | null>(null);
   const [showConsoleGuide, setShowConsoleGuide] = useState(false);
+  const [copiedDomain, setCopiedDomain] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -42,6 +48,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
     setIsSubmitting(true);
 
     try {
+      if (isResettingPassword) {
+        if (!email.trim()) {
+          throw new Error('Inserisci il tuo indirizzo email per recuperare la password.');
+        }
+        await resetPassword(email);
+        setInfoMsg(`Ti abbiamo inviato un'email a ${email} con il link per scegliere una nuova password! Controlla la tua casella di posta (e lo spam).`);
+        setIsResettingPassword(false);
+        return;
+      }
+
       let user: AppUser;
       if (isRegistering) {
         if (!displayName.trim()) {
@@ -62,13 +78,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
 
       if (msg.includes('auth/operation-not-allowed')) {
         setErrorMsg(
-          'Il provider Email/Password non è ancora abilitato nella console Firebase. Utilizza "Accedi con Account Google" (già attivo) oppure abilita Email/Password nella console Firebase.'
+          'Il provider Email/Password non è ancora abilitato nella console Firebase.'
         );
         setShowConsoleGuide(true);
-      } else if (msg.includes('auth/invalid-credential') || msg.includes('auth/user-not-found')) {
-        setErrorMsg('Credenziali non corrette o utente non trovato.');
+      } else if (msg.includes('auth/invalid-credential') || msg.includes('auth/user-not-found') || msg.includes('auth/wrong-password')) {
+        setErrorMsg('Password o email non corrette. Clicca su "Hai dimenticato la password?" per reimpostarla.');
       } else if (msg.includes('auth/email-already-in-use')) {
-        setErrorMsg('Questa email risulta già registrata. Accedi con la password.');
+        setErrorMsg('Questa email risulta già registrata. Accedi con la password o clicca su "Hai dimenticato la password?".');
       } else {
         setErrorMsg(msg);
       }
@@ -80,6 +96,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
   const handleGoogleLogin = async () => {
     setIsSubmitting(true);
     setErrorMsg(null);
+    setInfoMsg(null);
     setShowConsoleGuide(false);
     try {
       const user = await loginWithGoogle();
@@ -89,9 +106,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
       const msg = err?.message || String(err);
       if (msg.includes('auth/unauthorized-domain')) {
         const domain = typeof window !== 'undefined' ? window.location.hostname : 'viaggiabella.vercel.app';
-        setErrorMsg(
-          `Dominio non ancora autorizzato su Firebase (${domain}). Vai nella console Firebase → Authentication → Impostazioni → Domini autorizzati e aggiungi: ${domain}`
-        );
+        setErrorMsg(`Dominio non ancora autorizzato su Firebase: ${domain}`);
       } else {
         setErrorMsg(msg || 'Accesso con Google annullato o non riuscito.');
       }
@@ -168,11 +183,36 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
             <div className="flex-grow border-t border-slate-200"></div>
           </div>
 
+          {/* Messaggio Informativo / Successo */}
+          {infoMsg && (
+            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-start space-x-2.5 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5 text-emerald-600" />
+              <div className="flex-1 leading-relaxed">{infoMsg}</div>
+            </div>
+          )}
+
           {/* Messaggi di Errore o Avviso */}
           {errorMsg && (
-            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start space-x-2.5 animate-in fade-in">
-              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-600" />
-              <div className="flex-1 leading-relaxed">{errorMsg}</div>
+            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex flex-col space-y-2 animate-in fade-in">
+              <div className="flex items-start space-x-2.5">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-600" />
+                <div className="flex-1 leading-relaxed">{errorMsg}</div>
+              </div>
+              {errorMsg.includes('Dominio non ancora autorizzato') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const domain = typeof window !== 'undefined' ? window.location.hostname : '';
+                    navigator.clipboard.writeText(domain);
+                    setCopiedDomain(true);
+                    setTimeout(() => setCopiedDomain(false), 2500);
+                  }}
+                  className="self-start inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-900 font-bold text-[11px] transition-colors"
+                >
+                  {copiedDomain ? <Check className="w-3.5 h-3.5 text-emerald-700" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedDomain ? 'Dominio Copiato!' : 'Copia questo dominio da incollare su Firebase'}</span>
+                </button>
+              )}
             </div>
           )}
 
@@ -191,9 +231,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
             </div>
           )}
 
-          {/* Form Email / Password */}
+          {/* Form Email / Password o Recupero Password */}
           <form onSubmit={handleSubmit} className="space-y-3.5">
-            {isRegistering && (
+            {isRegistering && !isResettingPassword && (
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Nome e Cognome Operatore *
@@ -233,50 +273,90 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Password *
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                  <Lock className="w-4 h-4" />
+            {!isResettingPassword && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Password *
+                  </label>
+                  {!isRegistering && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsResettingPassword(true);
+                        setErrorMsg(null);
+                        setInfoMsg(null);
+                      }}
+                      className="text-[11px] font-semibold text-teal-700 hover:text-teal-800 transition-colors"
+                    >
+                      Password dimenticata?
+                    </button>
+                  )}
                 </div>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm font-medium"
-                />
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm font-medium"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             <button
               type="submit"
               disabled={isSubmitting}
               className="w-full min-h-[44px] py-3 bg-slate-900 hover:bg-slate-800 active:scale-98 text-white rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center space-x-2 disabled:opacity-50 tap-bounce"
             >
-              <span>{isSubmitting ? 'Verifica in corso...' : isRegistering ? 'Crea Account Operatore' : 'Accedi con Credenziali'}</span>
+              <span>
+                {isSubmitting
+                  ? 'Verifica in corso...'
+                  : isResettingPassword
+                  ? 'Invia Link Recupero Password'
+                  : isRegistering
+                  ? 'Crea Account Operatore'
+                  : 'Accedi con Credenziali'}
+              </span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
 
-          {/* Toggle Registrati / Accedi */}
-          <div className="text-center pt-1 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => {
-                setIsRegistering(!isRegistering);
-                setErrorMsg(null);
-                setShowConsoleGuide(false);
-              }}
-              className="text-xs font-semibold text-teal-700 hover:text-teal-800 transition-colors"
-            >
-              {isRegistering
-                ? 'Hai già un account registrato? Accedi'
-                : 'Primo accesso per nuovo operatore? Registrati qui'}
-            </button>
+          {/* Toggle Registrati / Accedi / Annulla Reset */}
+          <div className="text-center pt-1 border-t border-slate-100 space-y-1">
+            {isResettingPassword ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsResettingPassword(false);
+                  setErrorMsg(null);
+                  setInfoMsg(null);
+                }}
+                className="text-xs font-semibold text-slate-600 hover:text-slate-800 transition-colors"
+              >
+                Torna al login
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsRegistering(!isRegistering);
+                  setErrorMsg(null);
+                  setInfoMsg(null);
+                  setShowConsoleGuide(false);
+                }}
+                className="text-xs font-semibold text-teal-700 hover:text-teal-800 transition-colors"
+              >
+                {isRegistering
+                  ? 'Hai già un account registrato? Accedi'
+                  : 'Primo accesso per nuovo operatore? Registrati qui'}
+              </button>
+            )}
           </div>
         </div>
 
