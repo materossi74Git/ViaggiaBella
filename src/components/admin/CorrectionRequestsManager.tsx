@@ -77,7 +77,7 @@ export const CorrectionRequestsManager: React.FC<CorrectionRequestsManagerProps>
         if (correctedEndKm !== '') {
           const numKm = Number(correctedEndKm);
           appliedData.endKm = numKm;
-          appliedData.distanceKm = Math.max(0, numKm - targetUsage.startKm);
+          appliedData.distanceKm = Math.max(0, numKm - (targetUsage.startKm || 0));
         }
         if (correctedNotes) {
           appliedData.notes = correctedNotes;

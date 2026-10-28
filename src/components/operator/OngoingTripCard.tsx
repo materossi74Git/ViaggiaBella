@@ -81,11 +81,11 @@ export const OngoingTripCard: React.FC<OngoingTripCardProps> = ({ usage, onFinis
 
             <div className="bg-white/5 border border-white/10 rounded-2xl p-2.5">
               <div className="text-[10px] font-semibold text-teal-300 uppercase tracking-wider flex items-center">
-                <Gauge className="w-3 h-3 mr-1 text-teal-400" />
-                Km Partenza
+                <MapPin className="w-3 h-3 mr-1 text-teal-400" />
+                Punto GPS Partenza
               </div>
-              <div className="text-sm font-bold text-white font-mono mt-0.5">
-                {usage.startKm} km
+              <div className="text-xs font-bold text-white mt-0.5 truncate" title={usage.startGpsPoint || 'Acquisito alla partenza'}>
+                {usage.startGpsPoint || (usage.startKm ? `${usage.startKm} km` : 'Rilevato')}
               </div>
             </div>
 
@@ -101,7 +101,7 @@ export const OngoingTripCard: React.FC<OngoingTripCardProps> = ({ usage, onFinis
 
             <div className="bg-white/5 border border-white/10 rounded-2xl p-2.5">
               <div className="text-[10px] font-semibold text-teal-300 uppercase tracking-wider flex items-center truncate">
-                <MapPin className="w-3 h-3 mr-1 text-teal-400 shrink-0" />
+                <Navigation className="w-3 h-3 mr-1 text-teal-400 shrink-0" />
                 Destinazione
               </div>
               <div className="text-sm font-bold text-white truncate mt-0.5" title={usage.destination}>
@@ -112,7 +112,7 @@ export const OngoingTripCard: React.FC<OngoingTripCardProps> = ({ usage, onFinis
 
           <div className="text-xs text-teal-200/90 flex items-center space-x-1.5 pt-1">
             <CheckCircle2 className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-            <span>Al tuo rientro, premi il pulsante per inserire i km finali e chiudere il viaggio.</span>
+            <span>Al tuo rientro, premi il pulsante per registrare la lettura GPS di arrivo e chiudere il viaggio.</span>
           </div>
         </div>
 

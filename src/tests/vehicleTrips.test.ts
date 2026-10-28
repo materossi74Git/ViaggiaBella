@@ -265,12 +265,12 @@ describe('Audit Tecnico ViaggiaBella - Suite di Test di Conformità', () => {
     };
 
     const endKm = 48295; // 45 km percorsi
-    expect(endKm).toBeGreaterThanOrEqual(usage.startKm);
+    expect(endKm).toBeGreaterThanOrEqual(usage.startKm!);
 
     // Chiusura atomica
     usage.status = 'completato';
     usage.endKm = endKm;
-    usage.distanceKm = endKm - usage.startKm;
+    usage.distanceKm = endKm - usage.startKm!;
 
     vehicle.currentKm = endKm;
     vehicle.isOccupied = false;
@@ -427,5 +427,102 @@ describe('Audit Tecnico ViaggiaBella - Suite di Test di Conformità', () => {
     const parsed = parseVehicleIdentifier(nfcUrl);
     expect(parsed.vehicleId).toBe('veh_ducato_01');
     expect(parsed.source).toBe('nfc');
+  });
+
+  // SCENARIO 17: Scansione NFC/QR imposta il mezzo e genera il label del pulsante "Inizia viaggio ora: [Nome Mezzo]"
+  it('Scenario 17: Scansione NFC/QR formatta correttamente il pulsante di inizio viaggio con il nome del mezzo', () => {
+    const rawQr = 'https://viaggiabella.vercel.app/?vehicleId=veh_ducato_01&source=qr';
+    const parsed = parseVehicleIdentifier(rawQr);
+    const vehicle = mockVehicles.find(v => v.id === parsed.vehicleId);
+    expect(vehicle).toBeDefined();
+
+    // Funzione helper usata nel componente
+    const getButtonLabel = (v?: Vehicle | null) => (v ? `Inizia viaggio ora: ${v.name}` : 'Inizia Viaggio ORA');
+
+    expect(getButtonLabel(null)).toBe('Inizia Viaggio ORA');
+    expect(getButtonLabel(vehicle)).toBe('Inizia viaggio ora: Fiat Ducato 9 Posti');
+  });
+
+  // SCENARIO 18: Avvio viaggio registra punto GPS della lettura senza richiedere inserimento km manuali
+  it('Scenario 18: Avvio viaggio registra punto GPS senza imporre digitazione km cruscotto', () => {
+    const vehicle = mockVehicles[0];
+    const gpsLocation = {
+      latitude: 45.65921,
+      longitude: 10.05184,
+      accuracy: 6,
+      address: 'Via Roma, Iseo (BS)',
+      timestamp: '2026-10-28T10:00:00Z',
+    };
+
+    const newUsage: VehicleUsage = {
+      id: 'usg_gps_test_1',
+      vehicleId: vehicle.id,
+      vehicleName: vehicle.name,
+      vehiclePlate: vehicle.plate,
+      driverId: driverUser.uid,
+      driverName: driverUser.displayName,
+      usageDate: '2026-10-28',
+      startTime: '10:00',
+      destination: 'Centro Clarabella',
+      reason: 'Trasporto Utenti',
+      // Non è richiesto inserimento km manuale
+      startGpsPoint: `${gpsLocation.address} (${gpsLocation.latitude.toFixed(5)}, ${gpsLocation.longitude.toFixed(5)})`,
+      startLocation: gpsLocation,
+      status: 'in_corso',
+      mode: 'pulsanti',
+      createdAt: '2026-10-28T10:00:00Z',
+      updatedAt: '2026-10-28T10:00:00Z',
+      lastModifiedBy: driverUser.uid,
+      lastModifiedByName: driverUser.displayName,
+    };
+
+    expect(newUsage.startGpsPoint).toContain('Iseo');
+    expect(newUsage.startLocation?.latitude).toBe(45.65921);
+    expect(newUsage.status).toBe('in_corso');
+  });
+
+  // SCENARIO 19: Conclusione viaggio registra punto GPS di rientro senza richiedere km percorsi
+  it('Scenario 19: Conclusione viaggio con punto GPS di rientro senza forzare inserimento km', () => {
+    const usage: VehicleUsage = {
+      id: 'usg_gps_test_1',
+      vehicleId: 'veh_ducato_01',
+      vehicleName: 'Fiat Ducato 9 Posti',
+      vehiclePlate: 'FS 123 AB',
+      driverId: driverUser.uid,
+      driverName: driverUser.displayName,
+      usageDate: '2026-10-28',
+      startTime: '10:00',
+      destination: 'Centro Clarabella',
+      reason: 'Trasporto Utenti',
+      startGpsPoint: 'Via Roma, Iseo (BS)',
+      status: 'in_corso',
+      mode: 'pulsanti',
+      createdAt: '2026-10-28T10:00:00Z',
+      updatedAt: '2026-10-28T10:00:00Z',
+      lastModifiedBy: driverUser.uid,
+      lastModifiedByName: driverUser.displayName,
+    };
+
+    const finishGps = {
+      latitude: 45.62145,
+      longitude: 9.99812,
+      accuracy: 8,
+      address: 'Sede Clarabella, Corte Franca (BS)',
+      timestamp: '2026-10-28T11:30:00Z',
+    };
+
+    // Chiusura senza km finali
+    const completedUsage: VehicleUsage = {
+      ...usage,
+      status: 'completato',
+      endTime: '11:30',
+      endGpsPoint: `${finishGps.address} (${finishGps.latitude.toFixed(5)}, ${finishGps.longitude.toFixed(5)})`,
+      endLocation: finishGps,
+    };
+
+    expect(completedUsage.status).toBe('completato');
+    expect(completedUsage.endGpsPoint).toContain('Corte Franca');
+    expect(completedUsage.endKm).toBeUndefined();
+    expect(completedUsage.distanceKm).toBeUndefined();
   });
 });

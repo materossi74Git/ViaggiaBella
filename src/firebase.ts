@@ -1,5 +1,12 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import {
+  initializeAuth,
+  getAuth,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
+  browserPopupRedirectResolver,
+  Auth,
+} from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -12,8 +19,17 @@ export const db =
     ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
     : getFirestore(app);
 
-// Initialize Firebase Authentication
-export const auth = getAuth(app);
+// Initialize Firebase Authentication with robust persistence for PWAs and mobile apps
+let firebaseAuth: Auth;
+try {
+  firebaseAuth = initializeAuth(app, {
+    persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+    popupRedirectResolver: browserPopupRedirectResolver,
+  });
+} catch {
+  firebaseAuth = getAuth(app);
+}
+export const auth = firebaseAuth;
 
 // Operation types enum for Firestore error handling
 export enum OperationType {
@@ -78,7 +94,7 @@ export async function testFirestoreConnection(): Promise<boolean> {
       console.warn('Connessione Firestore offline o non raggiungibile.');
       return false;
     }
-    // Any other error (e.g. permission-denied on dummy doc) still confirms network reached Firestore
+    // Any other error confirms network reached Firestore
     return true;
   }
 }

@@ -168,12 +168,24 @@ export const MyUsagesList: React.FC<MyUsagesListProps> = ({
                         <Clock className="w-3.5 h-3.5 mr-1 text-slate-400" />
                         {usage.usageDate} | {usage.startTime} - {usage.endTime || 'In corso'}
                       </span>
-                      <span className="flex items-center font-medium">
-                        <Gauge className="w-3.5 h-3.5 mr-1 text-slate-400" />
-                        {usage.distanceKm !== undefined
-                          ? `${usage.distanceKm} km percorsi (${usage.startKm} → ${usage.endKm})`
-                          : `Km Iniziali: ${usage.startKm}`}
-                      </span>
+                      {usage.startGpsPoint && (
+                        <span className="flex items-center text-teal-800 font-medium">
+                          <MapPin className="w-3.5 h-3.5 mr-1 text-teal-600" />
+                          GPS Partenza: {usage.startGpsPoint}
+                        </span>
+                      )}
+                      {usage.endGpsPoint && (
+                        <span className="flex items-center text-emerald-800 font-medium">
+                          <MapPin className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                          GPS Arrivo: {usage.endGpsPoint}
+                        </span>
+                      )}
+                      {usage.distanceKm !== undefined && (
+                        <span className="flex items-center font-medium text-slate-600">
+                          <Gauge className="w-3.5 h-3.5 mr-1 text-slate-400" />
+                          {usage.distanceKm} km percorsi
+                        </span>
+                      )}
                     </div>
 
                     <div className="text-xs text-slate-500 pt-0.5">

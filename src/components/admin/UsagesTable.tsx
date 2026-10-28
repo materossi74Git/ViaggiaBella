@@ -253,13 +253,15 @@ export const UsagesTable: React.FC<UsagesTableProps> = ({
                         {usage.destination}
                       </div>
                       <div className="text-slate-500 text-[11px] truncate">
-                        {usage.reason}
+                        {usage.startGpsPoint ? `📍 ${usage.startGpsPoint}` : usage.reason}
                       </div>
                     </td>
 
                     <td className="py-3.5 px-4 text-right whitespace-nowrap font-mono font-bold text-slate-800">
                       {usage.distanceKm !== undefined ? (
                         <span>{usage.distanceKm} km</span>
+                      ) : usage.startGpsPoint || usage.endGpsPoint ? (
+                        <span className="text-teal-700 text-xs font-semibold">📍 GPS Rilevato</span>
                       ) : (
                         <span className="text-slate-400 font-normal italic">In corso</span>
                       )}

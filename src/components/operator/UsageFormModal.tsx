@@ -54,7 +54,7 @@ export const UsageFormModal: React.FC<UsageFormModalProps> = ({
       setEndTime(usageToEdit.endTime || '');
       setDestination(usageToEdit.destination);
       setReason(usageToEdit.reason);
-      setStartKm(usageToEdit.startKm);
+      setStartKm(usageToEdit.startKm ?? 0);
       setEndKm(usageToEdit.endKm !== undefined ? usageToEdit.endKm : '');
       setNotes(usageToEdit.notes || '');
 

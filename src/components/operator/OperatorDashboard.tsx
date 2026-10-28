@@ -26,6 +26,9 @@ interface OperatorDashboardProps {
   usages: VehicleUsage[];
   settings: AppSettings;
   ongoingTrip: VehicleUsage | null;
+  scannedVehicle?: Vehicle | null;
+  onClearScannedVehicle?: () => void;
+  onVehicleScanned?: (vehicle: Vehicle) => void;
   onStartTripModalOpen: (vehicle?: Vehicle) => void;
   onManualFormOpen: (vehicle?: Vehicle) => void;
   onQrScannerOpen: () => void;
@@ -40,6 +43,9 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
   usages,
   settings,
   ongoingTrip,
+  scannedVehicle,
+  onClearScannedVehicle,
+  onVehicleScanned,
   onStartTripModalOpen,
   onManualFormOpen,
   onQrScannerOpen,
@@ -47,10 +53,12 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
   onEditTripOpen,
   onRequestCorrectionOpen,
 }) => {
+  const [internalScannedVehicle, setInternalScannedVehicle] = useState<Vehicle | null>(null);
   const [nfcScanning, setNfcScanning] = useState(false);
   const [nfcFeedback, setNfcFeedback] = useState<string | null>(null);
   const [showSecondaryFleetDuringTrip, setShowSecondaryFleetDuringTrip] = useState(false);
 
+  const activeScannedVehicle = scannedVehicle || internalScannedVehicle;
   const nfcSupport = checkNfcSupport();
 
   const handleNfcClick = async () => {
@@ -81,11 +89,13 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
             v.plate.replace(/\s+/g, '').toUpperCase() === target.replace(/\s+/g, '').toUpperCase()
         );
         if (matched) {
+          setInternalScannedVehicle(matched);
+          if (onVehicleScanned) onVehicleScanned(matched);
           setNfcFeedback(`Mezzo riconosciuto via NFC: ${matched.name} (${matched.plate})`);
           setTimeout(() => {
             setNfcFeedback(null);
             onStartTripModalOpen(matched);
-          }, 800);
+          }, 700);
         } else {
           setNfcFeedback(`Tag letto (${tagId}), ma nessun mezzo associato trovato.`);
         }
@@ -243,29 +253,75 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
             </div>
           </div>
 
+          {/* Banner Mezzo Scansionato se presente */}
+          {activeScannedVehicle && (
+            <div className="p-3.5 bg-teal-50 border border-teal-300 rounded-2xl flex items-center justify-between shadow-xs animate-in fade-in">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-xl bg-teal-700 text-white flex items-center justify-center font-bold text-xs">
+                  🚐
+                </div>
+                <div>
+                  <div className="text-xs text-teal-950 font-black">
+                    Mezzo Scansionato: {activeScannedVehicle.name} ({activeScannedVehicle.plate})
+                  </div>
+                  <div className="text-[11px] text-teal-700">
+                    Pronto a partire · Lettura GPS automatica alla partenza (nessun km da inserire)
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setInternalScannedVehicle(null);
+                  if (onClearScannedVehicle) onClearScannedVehicle();
+                }}
+                className="text-xs text-teal-800 hover:text-teal-950 underline font-bold px-2 py-1 rounded-lg hover:bg-teal-100 transition-colors"
+              >
+                Cambia mezzo
+              </button>
+            </div>
+          )}
+
           {/* Griglia Azioni Primarie Ergonomiche (Mobile First, Thumb Friendly) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* 1. Inizia Utilizzo ORA (Modalità B - Pulsanti e Timestamp Automatico) */}
             <button
               type="button"
-              onClick={() => onStartTripModalOpen()}
-              className="p-6 bg-gradient-to-br from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 text-white rounded-3xl shadow-lg shadow-teal-900/20 text-left transition-all flex flex-col justify-between min-h-[170px] border border-teal-500/40 tap-bounce group relative overflow-hidden"
+              onClick={() => onStartTripModalOpen(activeScannedVehicle || undefined)}
+              className={`p-6 text-white rounded-3xl shadow-lg text-left transition-all flex flex-col justify-between min-h-[170px] border tap-bounce group relative overflow-hidden ${
+                activeScannedVehicle
+                  ? 'bg-gradient-to-br from-emerald-700 via-teal-800 to-teal-950 border-emerald-400/50 shadow-emerald-950/30 ring-2 ring-emerald-400/30'
+                  : 'bg-gradient-to-br from-teal-700 to-teal-900 hover:from-teal-600 hover:to-teal-800 border-teal-500/40 shadow-teal-900/20'
+              }`}
             >
               <div className="flex items-center justify-between w-full">
                 <div className="w-13 h-13 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:scale-105 transition-transform">
                   <PlayCircle className="w-8 h-8 text-white" />
                 </div>
-                <span className="text-[11px] font-bold uppercase tracking-wider bg-white/15 px-2.5 py-1 rounded-xl text-teal-100 border border-white/20">
-                  Modalità B Rapida
-                </span>
+                <div className="flex items-center space-x-1.5">
+                  {activeScannedVehicle && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-400/30 text-emerald-100 border border-emerald-300/40 px-2 py-0.5 rounded-lg">
+                      {activeScannedVehicle.plate}
+                    </span>
+                  )}
+                  <span className="text-[11px] font-bold uppercase tracking-wider bg-white/15 px-2.5 py-1 rounded-xl text-teal-100 border border-white/20">
+                    Modalità B Rapida
+                  </span>
+                </div>
               </div>
               <div className="pt-4">
                 <div className="font-black text-xl text-white leading-tight flex items-center gap-2">
-                  <span>Inizia Viaggio ORA</span>
-                  <ArrowRight className="w-5 h-5 text-teal-300 group-hover:translate-x-1 transition-transform" />
+                  <span className="truncate">
+                    {activeScannedVehicle
+                      ? `Inizia viaggio ora: ${activeScannedVehicle.name}`
+                      : 'Inizia Viaggio ORA'}
+                  </span>
+                  <ArrowRight className="w-5 h-5 text-teal-300 group-hover:translate-x-1 transition-transform shrink-0" />
                 </div>
                 <div className="text-xs text-teal-100/90 mt-1">
-                  Orario automatico, selezione del veicolo e partenza immediata
+                  {activeScannedVehicle
+                    ? `Partenza immediata per ${activeScannedVehicle.name} · Rilevamento punto GPS automatico`
+                    : 'Orario automatico, lettura GPS e partenza immediata'}
                 </div>
               </div>
             </button>

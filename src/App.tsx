@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, testFirestoreConnection } from './firebase';
 import { AppUser, Vehicle, VehicleUsage, CorrectionRequest, AuditLog, AppSettings } from './types';
-import { syncUserProfile, logoutUser } from './services/authService';
+import { syncUserProfile, logoutUser, checkRedirectAuthResult } from './services/authService';
 import {
   subscribeVehicles,
   subscribeUsages,
@@ -34,6 +34,8 @@ import { ToastNotification, ToastMessage } from './components/common/ToastNotifi
 import { FriendlyVanMascot } from './components/common/FriendlyVanMascot';
 import { VehicleIdentifiedActionModal } from './components/common/VehicleIdentifiedActionModal';
 import { NfcWelcomeInstallModal } from './components/common/NfcWelcomeInstallModal';
+import { checkForAppUpdates, RemoteVersionInfo } from './services/appUpdateService';
+import { AppUpdateModal } from './components/common/AppUpdateModal';
 
 // Componenti Admin
 import { AdminDashboard } from './components/admin/AdminDashboard';
@@ -77,6 +79,10 @@ export default function App() {
   const [targetUsageToEdit, setTargetUsageToEdit] = useState<VehicleUsage | null>(null);
   const [targetUsageForCorrection, setTargetUsageForCorrection] = useState<VehicleUsage | null>(null);
 
+  // Aggiornamenti APK In-App
+  const [updateInfo, setUpdateInfo] = useState<RemoteVersionInfo | null>(null);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
+
   // Sistema di Notifiche Toast per feedback positivo e micro-interazioni
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -102,6 +108,7 @@ export default function App() {
     testFirestoreConnection();
     ensureInitialFleet();
     getAppSettings().then(setSettings);
+    checkRedirectAuthResult().catch(err => console.warn('Controllo redirect:', err));
 
     const unsubscribe = onAuthStateChanged(auth, async fbUser => {
       if (fbUser) {
@@ -134,6 +141,41 @@ export default function App() {
 
     return () => unsubscribe();
   }, []);
+
+  // Controllo automatico aggiornamenti APK in background all'avvio
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      checkForAppUpdates()
+        .then(res => {
+          if (res.hasUpdate && res.remoteInfo) {
+            setUpdateInfo(res.remoteInfo);
+            const dismissedKey = `update_dismissed_${res.remoteInfo.versionCode}`;
+            if (!sessionStorage.getItem(dismissedKey)) {
+              setUpdateModalOpen(true);
+            }
+          }
+        })
+        .catch(err => console.warn('Controllo aggiornamenti:', err));
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleManualCheckUpdates = async () => {
+    addToast('info', 'Controllo aggiornamenti...', 'Verifica presenza di nuove versioni APK in corso.');
+    try {
+      const res = await checkForAppUpdates();
+      if (res.hasUpdate && res.remoteInfo) {
+        setUpdateInfo(res.remoteInfo);
+        setUpdateModalOpen(true);
+        addToast('success', 'Nuova Versione Trovata!', `È disponibile ViaggiaBella v${res.remoteInfo.version}.`);
+      } else {
+        addToast('success', 'App Aggiornata', `Stai già utilizzando l'ultima versione di ViaggiaBella (v${res.currentVersion})!`);
+      }
+    } catch {
+      addToast('error', 'Errore Verifica', 'Impossibile verificare gli aggiornamenti al momento.');
+    }
+  };
 
   // 2. Sottoscrizioni dati in tempo reale quando l'utente è autenticato
   useEffect(() => {
@@ -340,6 +382,8 @@ export default function App() {
           setViewMode(mode);
           setActiveTab(mode === 'amministratore' ? 'admin-dashboard' : 'operator-home');
         }}
+        onCheckUpdates={handleManualCheckUpdates}
+        hasUpdatePending={!!updateInfo}
       />
 
       {/* Contenuto Principale */}
@@ -401,11 +445,14 @@ export default function App() {
                 usages={usages}
                 settings={settings}
                 ongoingTrip={ongoingTrip}
+                scannedVehicle={targetVehicle}
+                onClearScannedVehicle={() => setTargetVehicle(null)}
+                onVehicleScanned={v => setTargetVehicle(v)}
                 onStartTripModalOpen={v => {
-                  if (v) {
-                    setTargetVehicle(v);
-                    setIdentifiedVia('manual');
-                    setVehicleActionModalOpen(true);
+                  const toStart = v || targetVehicle;
+                  if (toStart) {
+                    setTargetVehicle(toStart);
+                    setStartTripOpen(true);
                   } else {
                     setTargetVehicle(null);
                     setStartTripOpen(true);
@@ -606,6 +653,18 @@ export default function App() {
         driver={currentUser}
         onSubmitted={() => {
           addToast('info', 'Richiesta inviata', 'La richiesta di correzione è stata inoltrata all\'amministrazione.');
+        }}
+      />
+
+      {/* 10. Modale Aggiornamento Applicazione APK */}
+      <AppUpdateModal
+        isOpen={updateModalOpen}
+        updateInfo={updateInfo}
+        onClose={() => {
+          setUpdateModalOpen(false);
+          if (updateInfo) {
+            sessionStorage.setItem(`update_dismissed_${updateInfo.versionCode}`, 'true');
+          }
         }}
       />
 

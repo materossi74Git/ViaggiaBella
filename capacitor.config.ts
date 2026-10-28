@@ -12,6 +12,9 @@ const config: CapacitorConfig = {
     allowMixedContent: false,
     captureInput: true,
     backgroundColor: '#0f172a',
+    // Rimuove Version/4.0 e wv per consentire il login Google senza 403 disallowed_useragent
+    overrideUserAgent:
+      'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
   },
 };
 

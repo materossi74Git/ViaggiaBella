@@ -35,3 +35,32 @@
 .tap-bounce:active {
   transform: scale(0.97);
 }
+
+/* Stampa ottimizzata per il Cartellino QR del Veicolo */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  #printable-qr-badge, #printable-qr-badge * {
+    visibility: visible;
+  }
+  #printable-qr-badge {
+    position: fixed;
+    left: 50%;
+    top: 25%;
+    transform: translateX(-50%);
+    width: 90mm;
+    max-width: 90mm;
+    border: 2.5px solid #0f172a !important;
+    border-radius: 16px !important;
+    padding: 20px !important;
+    margin: 0 auto !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}

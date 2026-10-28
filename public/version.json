@@ -1,0 +1,8 @@
+{
+  "version": "1.1.0",
+  "versionCode": 2,
+  "releaseDate": "2026-10-28",
+  "apkUrl": "https://viaggiabella.vercel.app/viaggiabella.apk",
+  "minRequiredVersionCode": 1,
+  "releaseNotes": "Accesso con Account Google abilitato su APK Android, pulsante dinamico con nome mezzo scansionato (NFC e QR Code) e rilevamento automatico del punto GPS senza obbligo di inserire i km percorsi."
+}

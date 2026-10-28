@@ -156,13 +156,15 @@ export const VehicleIdentifiedActionModal: React.FC<VehicleIdentifiedActionModal
               </div>
               <div className="min-w-0">
                 <div className="flex items-center space-x-2">
-                  <span className="font-black text-base leading-tight">Inizia Viaggio ORA</span>
+                  <span className="font-black text-base leading-tight">
+                    Inizia viaggio ora: {vehicle.name}
+                  </span>
                   <span className="text-[10px] uppercase font-bold bg-white/20 px-2 py-0.5 rounded text-teal-100">
                     Modalità B
                   </span>
                 </div>
                 <div className="text-xs text-teal-100/90 mt-0.5 leading-snug">
-                  Sali a bordo adesso: registra orario in automatico con un tocco. Inserirai i km finali al rientro.
+                  Sali a bordo adesso: registra orario e punto GPS in automatico con un tocco. Nessun km da inserire.
                 </div>
               </div>
             </div>

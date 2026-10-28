@@ -253,11 +253,19 @@ export async function startTripWithButtons(
     driver: AppUser;
     destination: string;
     reason: string;
-    startKm: number;
+    startKm?: number;
+    startGpsPoint?: string;
+    startLocation?: {
+      latitude: number;
+      longitude: number;
+      accuracy?: number;
+      address?: string;
+      timestamp?: string;
+    };
     notes?: string;
   }
 ): Promise<VehicleUsage> {
-  const { vehicle, driver, destination, reason, startKm, notes } = params;
+  const { vehicle, driver, destination, reason, startKm, startGpsPoint, startLocation, notes } = params;
 
   if (!driver || !driver.uid) {
     throw new Error('Operatore non autenticato. Effettua l\'accesso prima di iniziare.');
@@ -299,6 +307,10 @@ export async function startTripWithButtons(
         throw new Error(`Attenzione: il mezzo ${vehicleData.name} (${vehicleData.plate}) risulta già impegnato in un viaggio attivo con ${busyBy}. Concludere il viaggio precedente prima di avviarne uno nuovo.`);
       }
 
+      const effectiveStartKm = startKm !== undefined && startKm !== null && !isNaN(startKm)
+        ? Math.max(0, startKm)
+        : (vehicleData.currentKm || 0);
+
       const newUsage: VehicleUsage = {
         id: usageId,
         vehicleId: vehicleData.id,
@@ -310,7 +322,9 @@ export async function startTripWithButtons(
         startTime: startTimeStr,
         destination: destination.trim(),
         reason: reason.trim(),
-        startKm: Math.max(0, startKm),
+        startKm: effectiveStartKm,
+        startGpsPoint: startGpsPoint || undefined,
+        startLocation: startLocation || undefined,
         notes: notes?.trim() || '',
         status: 'in_corso',
         mode: 'pulsanti',
@@ -340,7 +354,7 @@ export async function startTripWithButtons(
       userName: driver.displayName,
       userRole: driver.role,
       actionType: 'creazione',
-      summary: `Inizio viaggio con pulsanti (atomico): ${vehicle.name} (${vehicle.plate}) - Destinazione: ${destination}`,
+      summary: `Inizio viaggio con pulsanti (atomico): ${vehicle.name} (${vehicle.plate}) - Destinazione: ${destination}${startGpsPoint ? ` - GPS Partenza: ${startGpsPoint}` : ''}`,
       newValues: JSON.stringify(createdUsage),
     });
 
@@ -363,23 +377,31 @@ export async function startTripWithButtons(
  * 1. Legge il viaggio e il veicolo.
  * 2. Verifica che il viaggio sia effettivamente 'in_corso' (previene doppi clic).
  * 3. Verifica autorizzazione (operatore conducente o amministratore).
- * 4. Valida endKm >= startKm.
- * 5. Imposta status: 'completato', orario, km e distanza.
- * 6. Aggiorna i km del mezzo e rilascia l'occupazione (isOccupied: false, activeTripId: null).
+ * 4. Valida endKm (se inserito) >= startKm.
+ * 5. Imposta status: 'completato', orario, punto GPS di lettura chiusura e parametri opzionali.
+ * 6. Rilascia l'occupazione del mezzo (isOccupied: false, activeTripId: null).
  */
 export async function finishTripWithButtons(
   params: {
     usage: VehicleUsage;
     user: AppUser;
-    endKm: number;
+    endKm?: number;
+    endGpsPoint?: string;
+    endLocation?: {
+      latitude: number;
+      longitude: number;
+      accuracy?: number;
+      address?: string;
+      timestamp?: string;
+    };
     destination?: string;
     reason?: string;
     notes?: string;
   }
 ): Promise<VehicleUsage> {
-  const { usage, user, endKm, destination, reason, notes } = params;
+  const { usage, user, endKm, endGpsPoint, endLocation, destination, reason, notes } = params;
 
-  if (endKm < usage.startKm) {
+  if (endKm !== undefined && endKm !== null && !isNaN(endKm) && usage.startKm !== undefined && endKm < usage.startKm) {
     throw new Error('Il chilometraggio finale non può essere inferiore a quello iniziale.');
   }
 
@@ -388,14 +410,16 @@ export async function finishTripWithButtons(
   const hours = String(now.getHours()).padStart(2, '0');
   const minutes = String(now.getMinutes()).padStart(2, '0');
   const endTimeStr = `${hours}:${minutes}`;
-  const distance = Math.max(0, endKm - usage.startKm);
+
+  const hasEndKm = endKm !== undefined && endKm !== null && !isNaN(endKm);
+  const distance = hasEndKm && usage.startKm !== undefined ? Math.max(0, endKm - usage.startKm) : undefined;
 
   const usageRef = doc(db, 'vehicleUsages', usage.id);
   const vehicleRef = doc(db, 'vehicles', usage.vehicleId);
 
   try {
     const updatedUsage = await runTransaction(db, async (transaction) => {
-      // 1. Letture atomiche preliminari (TUTTE le letture devono precedere qualsiasi operazione di scrittura)
+      // 1. Letture atomiche preliminari
       const usageSnap = await transaction.get(usageRef);
       if (!usageSnap.exists()) {
         throw new Error('Il viaggio specificato non esiste o è stato rimosso.');
@@ -419,8 +443,8 @@ export async function finishTripWithButtons(
         throw new Error('Non sei autorizzato a concludere il viaggio di un altro operatore.');
       }
 
-      // 4. Validazione chilometri (endKm non inferiore a startKm del viaggio)
-      if (endKm < existingUsage.startKm) {
+      // 4. Validazione chilometri opzionale (solo se specificati)
+      if (hasEndKm && existingUsage.startKm !== undefined && endKm < existingUsage.startKm) {
         throw new Error(`I chilometri finali (${endKm}) non possono essere inferiori a quelli iniziali (${existingUsage.startKm}).`);
       }
 
@@ -434,8 +458,10 @@ export async function finishTripWithButtons(
         status: 'completato',
         endTime: endTimeStr,
         endRealTimestamp: nowIso,
-        endKm,
-        distanceKm: Math.max(0, endKm - existingUsage.startKm),
+        endKm: hasEndKm ? endKm : existingUsage.endKm,
+        distanceKm: distance !== undefined ? distance : existingUsage.distanceKm,
+        endGpsPoint: endGpsPoint || existingUsage.endGpsPoint,
+        endLocation: endLocation || existingUsage.endLocation,
         destination: destination ? destination.trim() : existingUsage.destination,
         reason: reason ? reason.trim() : existingUsage.reason,
         notes: notes !== undefined ? notes.trim() : existingUsage.notes,
@@ -445,9 +471,11 @@ export async function finishTripWithButtons(
         lastModifiedByName: user.displayName,
       };
 
-      const newKm = Math.max(vehicleData.currentKm || 0, endKm);
+      const newKm = hasEndKm
+        ? Math.max(vehicleData.currentKm || 0, endKm)
+        : (vehicleData.currentKm || 0);
 
-      // 6. Scritture atomiche (eseguite SOLO DOPO che tutte le letture e validazioni sono completate)
+      // 6. Scritture atomiche
       transaction.set(usageRef, completedUsage);
       transaction.update(vehicleRef, {
         currentKm: newKm,
@@ -467,7 +495,7 @@ export async function finishTripWithButtons(
       userName: user.displayName,
       userRole: user.role,
       actionType: 'completamento',
-      summary: `Viaggio concluso (atomico): ${usage.vehicleName} - Percorsi ${distance} km (Km finali: ${endKm})`,
+      summary: `Viaggio concluso (atomico): ${usage.vehicleName}${endGpsPoint ? ` - GPS Chiusura: ${endGpsPoint}` : ''}${distance !== undefined ? ` - Percorsi ${distance} km` : ''}`,
       previousValues: JSON.stringify(usage),
       newValues: JSON.stringify(updatedUsage),
     });

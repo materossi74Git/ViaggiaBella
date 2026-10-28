@@ -106,7 +106,23 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
       const msg = err?.message || String(err);
       if (msg.includes('auth/unauthorized-domain')) {
         const domain = typeof window !== 'undefined' ? window.location.hostname : 'viaggiabella.vercel.app';
+        if (!email) {
+          setEmail(ADMIN_EMAIL_BOOTSTRAP);
+        }
         setErrorMsg(`Dominio non ancora autorizzato su Firebase: ${domain}`);
+      } else if (msg.includes('auth/popup-closed-by-user')) {
+        setErrorMsg('Finestra di accesso Google chiusa prima del completamento.');
+      } else if (
+        msg.includes('missing-initial-state') ||
+        msg.includes('storage-partitioned') ||
+        msg.includes('sessionStorage')
+      ) {
+        if (!email) {
+          setEmail(ADMIN_EMAIL_BOOTSTRAP);
+        }
+        setErrorMsg(
+          `Connessione con Google protetta: se il popup non si apre sul tuo dispositivo Android, inserisci la password dell'amministratore (${ADMIN_EMAIL_BOOTSTRAP}) qui sotto o usa "Password dimenticata?".`
+        );
       } else {
         setErrorMsg(msg || 'Accesso con Google annullato o non riuscito.');
       }
@@ -193,25 +209,47 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
 
           {/* Messaggi di Errore o Avviso */}
           {errorMsg && (
-            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex flex-col space-y-2 animate-in fade-in">
+            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex flex-col space-y-2.5 animate-in fade-in">
               <div className="flex items-start space-x-2.5">
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-600" />
-                <div className="flex-1 leading-relaxed">{errorMsg}</div>
+                <div className="flex-1 leading-relaxed font-medium">{errorMsg}</div>
               </div>
               {errorMsg.includes('Dominio non ancora autorizzato') && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const domain = typeof window !== 'undefined' ? window.location.hostname : '';
-                    navigator.clipboard.writeText(domain);
-                    setCopiedDomain(true);
-                    setTimeout(() => setCopiedDomain(false), 2500);
-                  }}
-                  className="self-start inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-900 font-bold text-[11px] transition-colors"
-                >
-                  {copiedDomain ? <Check className="w-3.5 h-3.5 text-emerald-700" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedDomain ? 'Dominio Copiato!' : 'Copia questo dominio da incollare su Firebase'}</span>
-                </button>
+                <div className="mt-1 pt-2 border-t border-rose-200/60 space-y-2 text-[11px]">
+                  <p className="text-slate-700 leading-normal">
+                    Google blocca il login OAuth dai domini non registrati nella console del tuo progetto Firebase <strong>viaggiabella</strong>.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const domain = typeof window !== 'undefined' ? window.location.hostname : '';
+                        navigator.clipboard.writeText(domain);
+                        setCopiedDomain(true);
+                        setTimeout(() => setCopiedDomain(false), 2500);
+                      }}
+                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-900 font-bold transition-colors"
+                    >
+                      {copiedDomain ? <Check className="w-3.5 h-3.5 text-emerald-700" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedDomain ? 'Dominio Copiato!' : 'Copia Dominio Corrente'}</span>
+                    </button>
+                    <a
+                      href="https://console.firebase.google.com/project/viaggiabella/authentication/settings"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-teal-100 hover:bg-teal-200 text-teal-900 font-bold transition-colors"
+                    >
+                      <span>Apri Console Firebase</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                  <div className="p-2.5 bg-white/80 rounded-xl border border-rose-200 text-slate-800">
+                    <strong className="text-emerald-700">Soluzione Immediata (Zero Configurazione):</strong>
+                    <p className="mt-0.5 text-slate-600">
+                      L'accesso con <strong>Email e Password</strong> qui sotto funziona subito senza dover autorizzare alcun dominio! Inserisci la tua password qui sotto con l'email <strong>{ADMIN_EMAIL_BOOTSTRAP}</strong> per accedere come Amministratore.
+                    </p>
+                  </div>
+                </div>
               )}
             </div>
           )}

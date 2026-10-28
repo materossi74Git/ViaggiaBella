@@ -6,6 +6,8 @@ import {
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   User as FirebaseUser,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
@@ -118,13 +120,44 @@ export async function registerWithEmail(
 }
 
 /**
- * Accesso rapido con Google Popup
+ * Accesso rapido con Google (supporta sia Web con Popup sia WebView Android/APK con fallback su Redirect)
  */
 export async function loginWithGoogle(): Promise<AppUser> {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  const cred = await signInWithPopup(auth, provider);
-  return await syncUserProfile(cred.user);
+  try {
+    const cred = await signInWithPopup(auth, provider);
+    return await syncUserProfile(cred.user);
+  } catch (err: any) {
+    const msg = err?.message || String(err);
+    if (
+      msg.includes('operation-not-supported') ||
+      msg.includes('popup-blocked') ||
+      msg.includes('missing-initial-state') ||
+      msg.includes('storage-partitioned') ||
+      msg.includes('sessionStorage') ||
+      msg.includes('disallowed_useragent')
+    ) {
+      await signInWithRedirect(auth, provider);
+      return new Promise<never>(() => {});
+    }
+    throw err;
+  }
+}
+
+/**
+ * Verifica l'esito di un reindirizzamento OAuth (utilizzato all'avvio su Android/APK)
+ */
+export async function checkRedirectAuthResult(): Promise<AppUser | null> {
+  try {
+    const cred = await getRedirectResult(auth);
+    if (cred && cred.user) {
+      return await syncUserProfile(cred.user);
+    }
+  } catch (err) {
+    console.warn('Verifica redirect OAuth:', err);
+  }
+  return null;
 }
 
 /**

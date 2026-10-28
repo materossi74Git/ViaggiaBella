@@ -57,9 +57,26 @@ export interface VehicleUsage {
   endTime?: string; // HH:MM
   destination: string;
   reason: string;
-  startKm: number;
+  startKm?: number;
   endKm?: number;
   distanceKm?: number;
+  // Punti GPS della lettura (dove l'operatore effettua la lettura con NFC/QR o pulsante)
+  startGpsPoint?: string;
+  startLocation?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+    address?: string;
+    timestamp?: string;
+  };
+  endGpsPoint?: string;
+  endLocation?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+    address?: string;
+    timestamp?: string;
+  };
   notes?: string;
   status: UsageStatus;
   mode: UsageMode;
