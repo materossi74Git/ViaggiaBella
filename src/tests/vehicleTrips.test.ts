@@ -525,4 +525,49 @@ describe('Audit Tecnico ViaggiaBella - Suite di Test di Conformità', () => {
     expect(completedUsage.endKm).toBeUndefined();
     expect(completedUsage.distanceKm).toBeUndefined();
   });
+
+  // SCENARIO 20: Avvio e chiusura viaggio a GPS spento o assente (non bloccante)
+  it('Scenario 20: Avvio e chiusura viaggio procedono regolarmente anche con GPS disattivato o segnale assente', () => {
+    // Quando il GPS è spento, startGpsPoint e startLocation sono undefined/null
+    const usageWithoutGps: VehicleUsage = {
+      id: 'usg_no_gps_123',
+      vehicleId: mockVehicles[0].id,
+      vehicleName: mockVehicles[0].name,
+      vehiclePlate: mockVehicles[0].plate,
+      driverId: driverUser.uid,
+      driverName: driverUser.displayName,
+      usageDate: '2026-10-29',
+      startTime: '08:15',
+      destination: 'Servizio cooperativa',
+      reason: 'Trasporto Utenti',
+      // Nessun dato GPS
+      startGpsPoint: undefined,
+      startLocation: undefined,
+      status: 'in_corso',
+      mode: 'pulsanti',
+      createdAt: '2026-10-29T08:15:00Z',
+      updatedAt: '2026-10-29T08:15:00Z',
+      lastModifiedBy: driverUser.uid,
+      lastModifiedByName: driverUser.displayName,
+    };
+
+    expect(usageWithoutGps.status).toBe('in_corso');
+    expect(usageWithoutGps.startGpsPoint).toBeUndefined();
+    expect(usageWithoutGps.destination).toBe('Servizio cooperativa');
+
+    // Chiusura viaggio anch'essa a GPS spento
+    const closedWithoutGps: VehicleUsage = {
+      ...usageWithoutGps,
+      status: 'completato',
+      endTime: '09:45',
+      endGpsPoint: undefined,
+      endLocation: undefined,
+      updatedAt: '2026-10-29T09:45:00Z',
+    };
+
+    expect(closedWithoutGps.status).toBe('completato');
+    expect(closedWithoutGps.endTime).toBe('09:45');
+    expect(closedWithoutGps.endGpsPoint).toBeUndefined();
+  });
 });
+

@@ -251,8 +251,8 @@ export async function startTripWithButtons(
   params: {
     vehicle: Vehicle;
     driver: AppUser;
-    destination: string;
-    reason: string;
+    destination?: string;
+    reason?: string;
     startKm?: number;
     startGpsPoint?: string;
     startLocation?: {
@@ -274,6 +274,9 @@ export async function startTripWithButtons(
   if (driver.status === 'revocato') {
     throw new Error('Utenza non autorizzata o revocata.');
   }
+
+  const cleanDestination = (destination && destination.trim()) ? destination.trim() : 'Servizio cooperativa';
+  const cleanReason = (reason && reason.trim()) ? reason.trim() : 'Trasporto Utenti';
 
   const now = new Date();
   const usageId = 'usg_' + now.getTime() + '_' + Math.random().toString(36).substring(2, 6);
@@ -320,8 +323,8 @@ export async function startTripWithButtons(
         driverName: driver.displayName,
         usageDate: usageDateStr,
         startTime: startTimeStr,
-        destination: destination.trim(),
-        reason: reason.trim(),
+        destination: cleanDestination,
+        reason: cleanReason,
         startKm: effectiveStartKm,
         startGpsPoint: startGpsPoint || undefined,
         startLocation: startLocation || undefined,

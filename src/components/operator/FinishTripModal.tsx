@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CheckCircle2, X, AlertTriangle, MapPin, RefreshCw, Loader2, Sparkles } from 'lucide-react';
 import { VehicleUsage, AppUser } from '../../types';
 import { finishTripWithButtons } from '../../services/dbService';
-import { getCurrentGpsPoint, GpsPoint, getGoogleMapsUrl } from '../../services/gpsService';
+import { tryGetGpsPoint, GpsPoint, getGoogleMapsUrl } from '../../services/gpsService';
 
 interface FinishTripModalProps {
   usage: VehicleUsage | null;
@@ -27,10 +27,10 @@ export const FinishTripModal: React.FC<FinishTripModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // GPS state
+  // GPS state (non bloccante)
   const [gpsPoint, setGpsPoint] = useState<GpsPoint | null>(null);
   const [isLoadingGps, setIsLoadingGps] = useState(false);
-  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [gpsStatusNote, setGpsStatusNote] = useState<string | null>(null);
 
   // Chiudi con tasto Escape
   useEffect(() => {
@@ -45,7 +45,7 @@ export const FinishTripModal: React.FC<FinishTripModalProps> = ({
 
   useEffect(() => {
     if (usage && isOpen) {
-      setDestination(usage.destination || '');
+      setDestination(usage.destination || 'Servizio concluso');
       setReason(usage.reason || '');
       setNotes(usage.notes || '');
       setOptionalEndKm(usage.startKm ? String(usage.startKm) : '');
@@ -56,13 +56,16 @@ export const FinishTripModal: React.FC<FinishTripModalProps> = ({
 
   const detectGps = async () => {
     setIsLoadingGps(true);
-    setGpsError(null);
+    setGpsStatusNote(null);
     try {
-      const pt = await getCurrentGpsPoint(8000);
+      const pt = await tryGetGpsPoint(2500);
       setGpsPoint(pt);
-    } catch (err: any) {
-      console.warn('Rilevamento GPS chiusura:', err);
-      setGpsError(err?.message || 'GPS non raggiungibile');
+      if (!pt) {
+        setGpsStatusNote('GPS non attivo. Chiusura viaggio immediata senza coordinate.');
+      }
+    } catch {
+      setGpsPoint(null);
+      setGpsStatusNote('GPS non attivo. Chiusura viaggio immediata senza coordinate.');
     } finally {
       setIsLoadingGps(false);
     }
@@ -228,30 +231,30 @@ export const FinishTripModal: React.FC<FinishTripModalProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="text-[11px] text-slate-500">
-                  {gpsError ? (
-                    <span className="text-rose-700">{gpsError}</span>
+                <div className="text-[11px] text-slate-600 bg-amber-100/50 p-2 rounded-xl">
+                  {gpsStatusNote ? (
+                    <span className="font-medium text-amber-950">{gpsStatusNote}</span>
                   ) : (
-                    <span>Tocca "Rileva GPS" per memorizzare il punto di chiusura del servizio.</span>
+                    <span>GPS non rilevato. Puoi terminare il viaggio subito, il GPS non è obbligatorio.</span>
                   )}
                 </div>
               )}
               <div className="text-[10px] text-amber-900/80 italic">
-                * Non occorre inserire i km percorsi: la lettura GPS traccia la posizione e chiusura del viaggio.
+                * Nessun inserimento chilometrico obbligatorio: serve solo registrare l'avvenuto rientro del veicolo.
               </div>
             </div>
 
             {/* Destinazione / Fermate */}
             <div>
               <label className="block font-bold text-slate-700 mb-1 text-[11px] uppercase tracking-wide">
-                Destinazione Effettiva / Percorso
+                Destinazione Effettiva / Note Percorso
               </label>
               <input
                 type="text"
                 value={destination}
                 onChange={e => setDestination(e.target.value)}
+                placeholder="Es. Sede Clarabella, Servizio concluso..."
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500 text-xs"
-                required
               />
             </div>
 

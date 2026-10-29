@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PlayCircle, X, AlertTriangle, MapPin, RefreshCw, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
 import { Vehicle, AppUser, AppSettings } from '../../types';
 import { startTripWithButtons, getOngoingTripForVehicle } from '../../services/dbService';
-import { getCurrentGpsPoint, GpsPoint, getGoogleMapsUrl } from '../../services/gpsService';
+import { tryGetGpsPoint, GpsPoint, getGoogleMapsUrl } from '../../services/gpsService';
 
 interface StartTripModalProps {
   isOpen: boolean;
@@ -24,17 +24,17 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
   onTripStarted,
 }) => {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
-  const [destination, setDestination] = useState('');
+  const [destination, setDestination] = useState('Servizio cooperativa');
   const [reason, setReason] = useState(settings.reasons[0] || 'Trasporto Utenti');
   const [notes, setNotes] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeConflict, setActiveConflict] = useState<string | null>(null);
 
-  // GPS State
+  // GPS State (completamente facoltativo e non bloccante)
   const [gpsPoint, setGpsPoint] = useState<GpsPoint | null>(null);
   const [isLoadingGps, setIsLoadingGps] = useState(false);
-  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [gpsStatusNote, setGpsStatusNote] = useState<string | null>(null);
 
   // Chiudi con tasto Escape
   useEffect(() => {
@@ -56,7 +56,7 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
     }
   }, [initialVehicle, vehicles, selectedVehicleId]);
 
-  // Rilevamento automatico punto GPS all'apertura
+  // Rilevamento automatico punto GPS all'apertura (veloce e non bloccante: 2.5 secondi max)
   useEffect(() => {
     if (isOpen) {
       detectGps();
@@ -65,17 +65,16 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
 
   const detectGps = async () => {
     setIsLoadingGps(true);
-    setGpsError(null);
+    setGpsStatusNote(null);
     try {
-      const pt = await getCurrentGpsPoint(8000);
+      const pt = await tryGetGpsPoint(2500);
       setGpsPoint(pt);
-      // Suggerisci automaticamente se la destinazione è ancora vuota
-      if (!destination && pt.address) {
-        // Non sovrascriviamo se l'utente ha già digitato
+      if (!pt) {
+        setGpsStatusNote('GPS non attivo o segnale assente. Il viaggio parte comunque regolarmente!');
       }
-    } catch (err: any) {
-      console.warn('Rilevamento GPS non riuscito:', err);
-      setGpsError(err?.message || 'GPS non raggiungibile');
+    } catch {
+      setGpsPoint(null);
+      setGpsStatusNote('GPS non attivo o segnale assente. Il viaggio parte comunque regolarmente!');
     } finally {
       setIsLoadingGps(false);
     }
@@ -118,11 +117,6 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
       return;
     }
 
-    if (!destination.trim()) {
-      setErrorMsg('Specifica la destinazione del viaggio.');
-      return;
-    }
-
     if (activeConflict) {
       setErrorMsg(activeConflict);
       return;
@@ -132,6 +126,7 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
     setErrorMsg(null);
 
     try {
+      const finalDestination = destination.trim() || 'Servizio cooperativa';
       const startGpsPointStr = gpsPoint
         ? `${gpsPoint.address || 'Punto GPS'} (${gpsPoint.latitude.toFixed(5)}, ${gpsPoint.longitude.toFixed(5)})`
         : undefined;
@@ -139,7 +134,7 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
       await startTripWithButtons({
         vehicle: currentVehicle,
         driver,
-        destination,
+        destination: finalDestination,
         reason,
         startKm: currentVehicle.currentKm || 0,
         startGpsPoint: startGpsPointStr,
@@ -231,19 +226,19 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
               </select>
             </div>
 
-            {/* PUNTO GPS DELLA LETTURA (AUTOMATICO) */}
+            {/* PUNTO GPS DELLA LETTURA (FACOLTATIVO: SE ATTIVO LO REGISTRA, ALTRIMENTI PARTE SUBITO) */}
             <div className="p-4 rounded-2xl bg-teal-50/80 border border-teal-200/90 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2 text-teal-900 font-bold text-xs">
                   <MapPin className="w-4 h-4 text-teal-700" />
-                  <span>Punto GPS Lettura Partenza</span>
+                  <span>Punto GPS Lettura (Facoltativo)</span>
                 </div>
                 <button
                   type="button"
                   onClick={detectGps}
                   disabled={isLoadingGps}
                   className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-teal-100 hover:bg-teal-200 text-teal-900 text-[11px] font-semibold transition-colors disabled:opacity-50"
-                  title="Aggiorna punto GPS corrente"
+                  title="Rileva coordinate se GPS attivo"
                 >
                   <RefreshCw className={`w-3 h-3 ${isLoadingGps ? 'animate-spin' : ''}`} />
                   <span>{isLoadingGps ? 'Rilevamento...' : 'Rileva GPS'}</span>
@@ -253,7 +248,7 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
               {isLoadingGps ? (
                 <div className="flex items-center space-x-2 text-teal-800 text-xs py-1">
                   <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
-                  <span>Acquisizione coordinate GPS dal dispositivo in corso...</span>
+                  <span>Verifica segnale GPS in corso (partenza immediata disponibile)...</span>
                 </div>
               ) : gpsPoint ? (
                 <div className="space-y-1">
@@ -276,16 +271,16 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="text-[11px] text-slate-500">
-                  {gpsError ? (
-                    <span className="text-amber-700">{gpsError}</span>
+                <div className="text-[11px] text-slate-600 bg-teal-100/50 p-2 rounded-xl">
+                  {gpsStatusNote ? (
+                    <span className="font-medium text-teal-900">{gpsStatusNote}</span>
                   ) : (
-                    <span>Tocca "Rileva GPS" per memorizzare la posizione esatta della lettura.</span>
+                    <span>GPS non rilevato. Puoi partire subito, non è necessario avere il GPS attivo.</span>
                   )}
                 </div>
               )}
-              <div className="text-[10px] text-teal-700/80 italic">
-                * Non serve annotare i km dal cruscotto: il punto GPS registra la posizione della lettura.
+              <div className="text-[10px] text-teal-800/80 italic">
+                * Nessun km dal cruscotto richiesto: l'obiettivo è solo registrare l'uso del mezzo da parte degli operatori.
               </div>
             </div>
 
@@ -293,15 +288,14 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
             <div className="space-y-3">
               <div>
                 <label className="block font-bold text-slate-700 mb-1 text-[11px] uppercase tracking-wide">
-                  Destinazione Servizio *
+                  Destinazione Servizio (Preimpostata)
                 </label>
                 <input
                   type="text"
                   value={destination}
                   onChange={e => setDestination(e.target.value)}
-                  placeholder="Es. Centro Diurno, Brescia, Ospedale, Sede..."
+                  placeholder="Es. Servizio cooperativa, Centro Diurno, Sede..."
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600 text-xs font-medium"
-                  required
                 />
               </div>
 

@@ -322,6 +322,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
                       type="button"
                       onClick={() => {
                         setIsResettingPassword(true);
+                        if (!email) setEmail(ADMIN_EMAIL_BOOTSTRAP);
                         setErrorMsg(null);
                         setInfoMsg(null);
                       }}
