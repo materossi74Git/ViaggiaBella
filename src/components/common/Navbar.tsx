@@ -18,6 +18,7 @@ import {
   Sparkles,
   Smartphone,
   Download,
+  RefreshCw,
 } from 'lucide-react';
 import { AppUser } from '../../types';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -37,6 +38,7 @@ interface NavbarProps {
   onToggleViewMode?: (mode: 'operatore' | 'amministratore') => void;
   onCheckUpdates?: () => void;
   hasUpdatePending?: boolean;
+  isCheckingUpdates?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -52,6 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleViewMode,
   onCheckUpdates,
   hasUpdatePending = false,
+  isCheckingUpdates = false,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [androidModalOpen, setAndroidModalOpen] = useState(false);
@@ -234,15 +237,26 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 type="button"
                 onClick={onCheckUpdates}
+                disabled={isCheckingUpdates}
                 className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all tap-bounce ${
                   hasUpdatePending
                     ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-950/40 animate-pulse border border-emerald-400'
                     : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
-                }`}
-                title={hasUpdatePending ? 'Nuovo aggiornamento APK disponibile!' : 'Verifica se ci sono aggiornamenti'}
+                } ${isCheckingUpdates ? 'opacity-80 cursor-wait' : ''}`}
+                title={hasUpdatePending ? 'Nuovo aggiornamento APK disponibile!' : 'Verifica se ci sono nuove versioni'}
               >
-                <Download className={`w-3.5 h-3.5 ${hasUpdatePending ? 'text-white' : 'text-teal-400'}`} />
-                <span>{hasUpdatePending ? 'Aggiorna APK!' : 'Aggiornamenti'}</span>
+                {isCheckingUpdates ? (
+                  <RefreshCw className="w-3.5 h-3.5 text-teal-300 animate-spin" />
+                ) : (
+                  <Download className={`w-3.5 h-3.5 ${hasUpdatePending ? 'text-white' : 'text-teal-400'}`} />
+                )}
+                <span>
+                  {isCheckingUpdates
+                    ? 'Verifica...'
+                    : hasUpdatePending
+                    ? 'Aggiorna APK!'
+                    : 'Verifica Aggiornamenti'}
+                </span>
               </button>
             )}
             <PWAInstallButton />
@@ -477,14 +491,25 @@ export const Navbar: React.FC<NavbarProps> = ({
                   setMobileMenuOpen(false);
                   onCheckUpdates();
                 }}
+                disabled={isCheckingUpdates}
                 className={`w-full min-h-[44px] flex items-center px-3 text-xs font-semibold rounded-xl tap-bounce ${
                   hasUpdatePending
                     ? 'bg-emerald-600 text-white font-bold animate-pulse'
                     : 'text-slate-200 hover:bg-slate-800'
-                }`}
+                } ${isCheckingUpdates ? 'opacity-80' : ''}`}
               >
-                <Download className={`w-4 h-4 mr-3 ${hasUpdatePending ? 'text-white' : 'text-emerald-400'}`} />
-                <span>{hasUpdatePending ? 'Aggiornamento Disponibile! (Scarica APK)' : 'Verifica Aggiornamenti APK'}</span>
+                {isCheckingUpdates ? (
+                  <RefreshCw className="w-4 h-4 mr-3 text-teal-300 animate-spin" />
+                ) : (
+                  <Download className={`w-4 h-4 mr-3 ${hasUpdatePending ? 'text-white' : 'text-emerald-400'}`} />
+                )}
+                <span>
+                  {isCheckingUpdates
+                    ? 'Verifica in corso...'
+                    : hasUpdatePending
+                    ? 'Aggiornamento Disponibile! (Scarica APK)'
+                    : 'Verifica Aggiornamenti APK'}
+                </span>
               </button>
             )}
             <PWAInstallButton />
@@ -518,6 +543,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       <AndroidAppGuideModal
         isOpen={androidModalOpen}
         onClose={() => setAndroidModalOpen(false)}
+        onCheckUpdates={onCheckUpdates}
       />
     </>
   );

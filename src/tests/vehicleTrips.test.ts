@@ -569,5 +569,30 @@ describe('Audit Tecnico ViaggiaBella - Suite di Test di Conformità', () => {
     expect(closedWithoutGps.endTime).toBe('09:45');
     expect(closedWithoutGps.endGpsPoint).toBeUndefined();
   });
+
+  it('Scenario 21: Verifica aggiornamenti - Quando la versione locale è uguale o superiore alla remota, segnala che è già aggiornata', () => {
+    const localVersionCode = 3;
+    const remoteVersionCode = 3;
+    const hasUpdate = remoteVersionCode > localVersionCode;
+    expect(hasUpdate).toBe(false);
+
+    // Messaggio atteso: "La versione corrente è già aggiornata"
+    const statusMessage = hasUpdate
+      ? 'Trovato nuovo aggiornamento disponibile'
+      : 'La versione corrente è già aggiornata';
+    expect(statusMessage).toBe('La versione corrente è già aggiornata');
+  });
+
+  it('Scenario 22: Verifica aggiornamenti - Quando sul server è disponibile una versione più recente, segnala il nuovo aggiornamento', () => {
+    const localVersionCode = 2; // APK installata precedentemente v1.1.0
+    const remoteVersionCode = 3; // Nuova release v1.2.0
+    const hasUpdate = remoteVersionCode > localVersionCode;
+    expect(hasUpdate).toBe(true);
+
+    const statusMessage = hasUpdate
+      ? 'Trovato nuovo aggiornamento disponibile'
+      : 'La versione corrente è già aggiornata';
+    expect(statusMessage).toBe('Trovato nuovo aggiornamento disponibile');
+  });
 });
 

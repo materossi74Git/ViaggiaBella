@@ -26,61 +26,112 @@ export interface UpdateCheckResult {
 
 // Versione compilata in questa build dell'app
 export const APP_INFO = {
-  version: '1.1.0',
-  versionCode: 2,
+  version: '1.2.0',
+  versionCode: 3,
   appName: 'ViaggiaBella',
 };
 
+export interface RemoteVersionInfo {
+  version: string;
+  versionCode: number;
+  releaseDate: string;
+  apkUrl: string;
+  minRequiredVersionCode?: number;
+  releaseNotes?: string;
+}
+
+export interface UpdateCheckResult {
+  success: boolean;
+  hasUpdate: boolean;
+  currentVersion: string;
+  currentVersionCode: number;
+  remoteInfo?: RemoteVersionInfo;
+  isMandatory?: boolean;
+  checkedAt?: string;
+  error?: string;
+}
+
 /**
  * Controlla se sul server è presente una versione APK più recente di quella attualmente installata.
+ * Tenta prima il dominio relativo (Web/PWA/preview), poi il dominio ufficiale (APK nativo).
  */
 export async function checkForAppUpdates(): Promise<UpdateCheckResult> {
-  const defaultResult: UpdateCheckResult = {
-    hasUpdate: false,
-    currentVersion: APP_INFO.version,
-    currentVersionCode: APP_INFO.versionCode,
-  };
+  const currentVersion = APP_INFO.version;
+  const currentVersionCode = APP_INFO.versionCode;
 
-  try {
-    // Prova a scaricare version.json dal dominio ufficiale con timestamp anti-cache
-    const url = `${OFFICIAL_DOMAIN}/version.json?t=${Date.now()}`;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+  // Lista di endpoint candidati in ordine di affidabilità
+  const candidateUrls: string[] = [];
 
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'Cache-Control': 'no-cache',
-      },
-    });
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      return defaultResult;
+  if (typeof window !== 'undefined' && window.location && window.location.origin) {
+    const origin = window.location.origin.replace(/\/+$/, '');
+    // Se non siamo su localhost/capacitor, il server corrente ha il file version.json più fresco
+    if (!origin.includes('localhost') && !origin.startsWith('capacitor://')) {
+      candidateUrls.push(`${origin}/version.json?t=${Date.now()}`);
     }
-
-    const remote: RemoteVersionInfo = await res.json();
-
-    if (remote && typeof remote.versionCode === 'number') {
-      const hasUpdate = remote.versionCode > APP_INFO.versionCode;
-      const isMandatory =
-        typeof remote.minRequiredVersionCode === 'number' &&
-        APP_INFO.versionCode < remote.minRequiredVersionCode;
-
-      return {
-        hasUpdate,
-        currentVersion: APP_INFO.version,
-        currentVersionCode: APP_INFO.versionCode,
-        remoteInfo: remote,
-        isMandatory,
-      };
-    }
-
-    return defaultResult;
-  } catch (error) {
-    console.warn('Verifica aggiornamenti app non riuscita:', error);
-    return defaultResult;
   }
+
+  // Dominio ufficiale di produzione
+  candidateUrls.push(`${OFFICIAL_DOMAIN.replace(/\/+$/, '')}/version.json?t=${Date.now()}`);
+  
+  // Fallback relativo (utile se servito dalla stessa app)
+  candidateUrls.push(`/version.json?t=${Date.now()}`);
+
+  // Rimuovi duplicati
+  const uniqueUrls = Array.from(new Set(candidateUrls));
+
+  let lastError: Error | null = null;
+  let remote: RemoteVersionInfo | null = null;
+
+  for (const url of uniqueUrls) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data.versionCode === 'number') {
+          remote = data;
+          break;
+        }
+      }
+    } catch (err: any) {
+      lastError = err;
+    }
+  }
+
+  if (remote) {
+    const hasUpdate = remote.versionCode > currentVersionCode;
+    const isMandatory =
+      typeof remote.minRequiredVersionCode === 'number' &&
+      currentVersionCode < remote.minRequiredVersionCode;
+
+    return {
+      success: true,
+      hasUpdate,
+      currentVersion,
+      currentVersionCode,
+      remoteInfo: remote,
+      isMandatory,
+      checkedAt: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+    };
+  }
+
+  return {
+    success: false,
+    hasUpdate: false,
+    currentVersion,
+    currentVersionCode,
+    error: lastError?.message || 'Impossibile contattare il server per verificare le versioni.',
+  };
 }
 
 /**

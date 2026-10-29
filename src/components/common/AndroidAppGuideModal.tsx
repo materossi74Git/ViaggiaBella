@@ -14,18 +14,22 @@ import {
   Info,
   Download,
   AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
+import { APP_INFO } from '../../services/appUpdateService';
 
 interface AndroidAppGuideModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onCheckUpdates?: () => void;
 }
 
 export const AndroidAppGuideModal: React.FC<AndroidAppGuideModalProps> = ({
   isOpen,
   onClose,
+  onCheckUpdates,
 }) => {
   const [copied, setCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
@@ -253,6 +257,32 @@ export const AndroidAppGuideModal: React.FC<AndroidAppGuideModalProps> = ({
             <div className="p-3 bg-white rounded-xl border border-indigo-100 text-xs text-slate-700">
               <span className="font-bold text-indigo-950">Apertura immediata del mezzo:</span> lo smartphone rileva il tag e apre direttamente la schermata di <em>ViaggiaBella</em> con il veicolo e la targa già selezionati, pronto per registrare i km iniziali o avviare il viaggio.
             </div>
+          </div>
+
+          {/* Sezione Stato Versione & Verifica Aggiornamenti In-App */}
+          <div className="rounded-2xl border border-teal-200 bg-teal-50/60 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div>
+              <div className="font-extrabold text-teal-950 flex items-center space-x-1.5">
+                <RefreshCw className="w-3.5 h-3.5 text-teal-700" />
+                <span>Versione App & Aggiornamenti</span>
+              </div>
+              <p className="text-[11px] text-teal-900/90 mt-1">
+                Versione installata: <strong>v{APP_INFO.version}</strong> (build {APP_INFO.versionCode}). Puoi verificare la presenza di nuove release in qualsiasi momento.
+              </p>
+            </div>
+            {onCheckUpdates && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onCheckUpdates();
+                }}
+                className="inline-flex items-center justify-center space-x-1.5 px-4 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-600 active:scale-95 text-white font-bold text-xs tap-bounce shrink-0 shadow-xs"
+              >
+                <Download className="w-3.5 h-3.5 text-teal-200" />
+                <span>Verifica Nuove Versioni</span>
+              </button>
+            )}
           </div>
 
           {/* Opzione Sviluppatori / PWABuilder */}

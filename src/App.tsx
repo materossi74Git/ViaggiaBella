@@ -34,8 +34,8 @@ import { ToastNotification, ToastMessage } from './components/common/ToastNotifi
 import { FriendlyVanMascot } from './components/common/FriendlyVanMascot';
 import { VehicleIdentifiedActionModal } from './components/common/VehicleIdentifiedActionModal';
 import { NfcWelcomeInstallModal } from './components/common/NfcWelcomeInstallModal';
-import { checkForAppUpdates, RemoteVersionInfo } from './services/appUpdateService';
-import { AppUpdateModal } from './components/common/AppUpdateModal';
+import { checkForAppUpdates, RemoteVersionInfo, APP_INFO } from './services/appUpdateService';
+import { AppUpdateModal, UpdateModalViewMode } from './components/common/AppUpdateModal';
 
 // Componenti Admin
 import { AdminDashboard } from './components/admin/AdminDashboard';
@@ -82,6 +82,10 @@ export default function App() {
   // Aggiornamenti APK In-App
   const [updateInfo, setUpdateInfo] = useState<RemoteVersionInfo | null>(null);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const [updateModalViewMode, setUpdateModalViewMode] = useState<UpdateModalViewMode>('idle');
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  const [lastCheckedAt, setLastCheckedAt] = useState<string>('');
+  const [updateErrorMessage, setUpdateErrorMessage] = useState<string>('');
 
   // Sistema di Notifiche Toast per feedback positivo e micro-interazioni
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -142,7 +146,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Controllo automatico aggiornamenti APK in background all'avvio
+  // Controllo automatico aggiornamenti APK in background all'avvio (silenzioso)
   useEffect(() => {
     const timer = setTimeout(() => {
       checkForAppUpdates()
@@ -151,6 +155,7 @@ export default function App() {
             setUpdateInfo(res.remoteInfo);
             const dismissedKey = `update_dismissed_${res.remoteInfo.versionCode}`;
             if (!sessionStorage.getItem(dismissedKey)) {
+              setUpdateModalViewMode('update_available');
               setUpdateModalOpen(true);
             }
           }
@@ -162,18 +167,34 @@ export default function App() {
   }, []);
 
   const handleManualCheckUpdates = async () => {
-    addToast('info', 'Controllo aggiornamenti...', 'Verifica presenza di nuove versioni APK in corso.');
+    setIsCheckingUpdates(true);
+    setUpdateModalViewMode('checking');
+    setUpdateModalOpen(true);
+    addToast('info', 'Controllo aggiornamenti...', 'Verifica presenza di nuove versioni APK in corso.', 2500);
+
     try {
       const res = await checkForAppUpdates();
+      setIsCheckingUpdates(false);
+      const checkTime = res.checkedAt || new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+      setLastCheckedAt(checkTime);
+
       if (res.hasUpdate && res.remoteInfo) {
         setUpdateInfo(res.remoteInfo);
-        setUpdateModalOpen(true);
-        addToast('success', 'Nuova Versione Trovata!', `È disponibile ViaggiaBella v${res.remoteInfo.version}.`);
+        setUpdateModalViewMode('update_available');
+        addToast('success', 'Trovato nuovo aggiornamento disponibile!', `È disponibile ViaggiaBella v${res.remoteInfo.version}.`, 5000);
+      } else if (res.success) {
+        setUpdateModalViewMode('up_to_date');
+        addToast('success', 'La versione corrente è già aggiornata', `Stai già utilizzando l'ultima versione di ViaggiaBella (v${res.currentVersion})!`, 5000);
       } else {
-        addToast('success', 'App Aggiornata', `Stai già utilizzando l'ultima versione di ViaggiaBella (v${res.currentVersion})!`);
+        setUpdateModalViewMode('error');
+        setUpdateErrorMessage(res.error || 'Impossibile contattare il server delle versioni.');
+        addToast('error', 'Errore Verifica', 'Impossibile verificare gli aggiornamenti al momento.', 5000);
       }
-    } catch {
-      addToast('error', 'Errore Verifica', 'Impossibile verificare gli aggiornamenti al momento.');
+    } catch (err: any) {
+      setIsCheckingUpdates(false);
+      setUpdateModalViewMode('error');
+      setUpdateErrorMessage(err?.message || 'Errore di connessione imprevisto.');
+      addToast('error', 'Errore Verifica', 'Impossibile verificare gli aggiornamenti al momento.', 5000);
     }
   };
 
@@ -384,6 +405,7 @@ export default function App() {
         }}
         onCheckUpdates={handleManualCheckUpdates}
         hasUpdatePending={!!updateInfo}
+        isCheckingUpdates={isCheckingUpdates}
       />
 
       {/* Contenuto Principale */}
@@ -659,7 +681,13 @@ export default function App() {
       {/* 10. Modale Aggiornamento Applicazione APK */}
       <AppUpdateModal
         isOpen={updateModalOpen}
+        viewMode={updateModalViewMode}
         updateInfo={updateInfo}
+        currentVersion={APP_INFO.version}
+        currentVersionCode={APP_INFO.versionCode}
+        checkedAt={lastCheckedAt}
+        errorMessage={updateErrorMessage}
+        onRetry={handleManualCheckUpdates}
         onClose={() => {
           setUpdateModalOpen(false);
           if (updateInfo) {
