@@ -1,8 +1,8 @@
 {
   "version": "1.2.0",
   "versionCode": 3,
-  "releaseDate": "2026-10-29",
+  "releaseDate": "2026-10-30",
   "apkUrl": "https://viaggiabella.vercel.app/viaggiabella.apk",
   "minRequiredVersionCode": 1,
-  "releaseNotes": "Avvio viaggio immediato anche a GPS spento o assente. Accesso con Account Google migliorato su Android APK con supporto popup integrato."
+  "releaseNotes": "Avvio viaggio immediato anche a GPS spento o assente. Accesso con Account Google migliorato su Android APK. Controllo e sincronizzazione aggiornamenti in tempo reale via cloud."
 }

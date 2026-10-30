@@ -1,8 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import { PlayCircle, X, AlertTriangle, MapPin, RefreshCw, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { PlayCircle, X, AlertTriangle, MapPin, RefreshCw, CheckCircle2, Loader2, Sparkles, Unlock, ArrowRight } from 'lucide-react';
 import { Vehicle, AppUser, AppSettings } from '../../types';
-import { startTripWithButtons, getOngoingTripForVehicle } from '../../services/dbService';
+import { startTripWithButtons, getOngoingTripForVehicle, forceReleaseVehicleLock } from '../../services/dbService';
 import { tryGetGpsPoint, GpsPoint, getGoogleMapsUrl } from '../../services/gpsService';
+
+function formatTripErrorMessage(err: any): string {
+  if (!err) return 'Errore durante l\'avvio del viaggio.';
+  const msg = typeof err === 'string' ? err : (err?.message || String(err));
+  if (msg.includes('Missing or insufficient permissions') || msg.includes('permission-denied')) {
+    return 'Permesso di scrittura non autorizzato: verifica che la sessione sia attiva con le tue credenziali.';
+  }
+  if (msg.includes('risulta già in uso') || msg.includes('già impegnato') || msg.includes('hai già un viaggio attivo')) {
+    return msg;
+  }
+  if (msg.includes('Unsupported field value') || msg.includes('undefined')) {
+    return 'Dati non validi durante il salvataggio nel database.';
+  }
+  return msg;
+}
 
 interface StartTripModalProps {
   isOpen: boolean;
@@ -25,11 +40,14 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
 }) => {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
   const [destination, setDestination] = useState('Servizio cooperativa');
-  const [reason, setReason] = useState(settings.reasons[0] || 'Trasporto Utenti');
+  const [reason, setReason] = useState(settings.reasons[0] || 'Trasporto Utenti e Servizi Educativi');
   const [notes, setNotes] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUnlocking, setIsUnlocking] = useState(false);
   const [activeConflict, setActiveConflict] = useState<string | null>(null);
+  const [isConflictWithSelf, setIsConflictWithSelf] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // GPS State (completamente facoltativo e non bloccante)
   const [gpsPoint, setGpsPoint] = useState<GpsPoint | null>(null);
@@ -84,22 +102,35 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
     const v = vehicles.find(item => item.id === selectedVehicleId);
     if (v) {
       if (v.isOccupied || (v.activeTripId && v.activeTripId.trim() !== '')) {
-        setActiveConflict(
-          `Attenzione: ${v.name} risulta già in viaggio con il conducente ${v.activeDriverName || 'un altro operatore'}.`
-        );
+        const isSelf = v.activeDriverId === driver.uid;
+        setIsConflictWithSelf(isSelf);
+        if (isSelf) {
+          setActiveConflict(`Hai già un viaggio attivo con ${v.name}.`);
+        } else {
+          setActiveConflict(
+            `Attenzione: ${v.name} risulta già in viaggio con ${v.activeDriverName || 'un altro operatore'}.`
+          );
+        }
       } else {
         getOngoingTripForVehicle(v.id).then(ongoing => {
           if (ongoing) {
-            setActiveConflict(
-              `Attenzione: ${v.name} risulta già in viaggio con il conducente ${ongoing.driverName}.`
-            );
+            const isSelf = ongoing.driverId === driver.uid;
+            setIsConflictWithSelf(isSelf);
+            if (isSelf) {
+              setActiveConflict(`Hai già un viaggio attivo con ${v.name}.`);
+            } else {
+              setActiveConflict(
+                `Attenzione: ${v.name} risulta già in viaggio con ${ongoing.driverName}.`
+              );
+            }
           } else {
             setActiveConflict(null);
+            setIsConflictWithSelf(false);
           }
         });
       }
     }
-  }, [selectedVehicleId, vehicles]);
+  }, [selectedVehicleId, vehicles, driver.uid]);
 
   if (!isOpen) return null;
 
@@ -107,6 +138,21 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
   const buttonLabel = currentVehicle
     ? `Inizia viaggio ora: ${currentVehicle.name}`
     : 'Inizia Viaggio ORA';
+
+  const handleForceUnlock = async () => {
+    if (!currentVehicle) return;
+    setIsUnlocking(true);
+    try {
+      await forceReleaseVehicleLock(currentVehicle.id, driver);
+      setActiveConflict(null);
+      setIsConflictWithSelf(false);
+      setErrorMsg(null);
+    } catch (err: any) {
+      setErrorMsg('Impossibile sbloccare il mezzo: ' + (err?.message || 'Errore database.'));
+    } finally {
+      setIsUnlocking(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,7 +163,7 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
       return;
     }
 
-    if (activeConflict) {
+    if (activeConflict && !isConflictWithSelf) {
       setErrorMsg(activeConflict);
       return;
     }
@@ -145,7 +191,12 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
       onTripStarted();
       onClose();
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Errore durante l\'avvio del viaggio.');
+      console.error('Errore startTripWithButtons:', err);
+      const friendly = formatTripErrorMessage(err);
+      setErrorMsg(friendly);
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -191,18 +242,55 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
 
         {/* Corpo Modale Scorrevole */}
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
-          <div className="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
+          <div ref={scrollContainerRef} className="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
             {errorMsg && (
-              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start space-x-2">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <span>{errorMsg}</span>
+              <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start space-x-2.5 shadow-xs">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-600" />
+                <div className="flex-1">
+                  <div className="font-bold">Attenzione</div>
+                  <div>{errorMsg}</div>
+                </div>
               </div>
             )}
 
             {activeConflict && (
-              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start space-x-2">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-600" />
-                <span>{activeConflict}</span>
+              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-2 shadow-xs">
+                <div className="flex items-start space-x-2">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-600" />
+                  <div className="flex-1">
+                    <div className="font-bold">Mezzo già impegnato</div>
+                    <div>{activeConflict}</div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {isConflictWithSelf && (
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] shadow-xs tap-bounce transition-colors"
+                    >
+                      <span>Vai al tuo viaggio in corso</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+
+                  {(driver.role === 'amministratore' || isConflictWithSelf) && (
+                    <button
+                      type="button"
+                      onClick={handleForceUnlock}
+                      disabled={isUnlocking}
+                      className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl border border-amber-300 bg-white hover:bg-amber-100/70 text-amber-900 font-semibold text-[11px] transition-colors"
+                    >
+                      {isUnlocking ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Unlock className="w-3.5 h-3.5" />
+                      )}
+                      <span>{isUnlocking ? 'Sblocco...' : 'Sblocca Mezzo'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -275,12 +363,12 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
                   {gpsStatusNote ? (
                     <span className="font-medium text-teal-900">{gpsStatusNote}</span>
                   ) : (
-                    <span>GPS non rilevato. Puoi partire subito, non è necessario avere il GPS attivo.</span>
+                    <span>GPS non attivo. Puoi partire subito in serenità!</span>
                   )}
                 </div>
               )}
               <div className="text-[10px] text-teal-800/80 italic">
-                * Nessun km dal cruscotto richiesto: l'obiettivo è solo registrare l'uso del mezzo da parte degli operatori.
+                * Il segnale GPS è puramente indicativo: puoi avviare il viaggio anche con GPS spento.
               </div>
             </div>
 
@@ -288,13 +376,14 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
             <div className="space-y-3">
               <div>
                 <label className="block font-bold text-slate-700 mb-1 text-[11px] uppercase tracking-wide">
-                  Destinazione Servizio (Preimpostata)
+                  Destinazione Servizio *
                 </label>
                 <input
                   type="text"
                   value={destination}
                   onChange={e => setDestination(e.target.value)}
                   placeholder="Es. Servizio cooperativa, Centro Diurno, Sede..."
+                  required
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-600 text-xs font-medium"
                 />
               </div>
@@ -337,24 +426,61 @@ export const StartTripModal: React.FC<StartTripModalProps> = ({
             </div>
           </div>
 
-          {/* Footer Fisso con Pulsante Inizia Viaggio Ora + Nome Mezzo */}
-          <div className="p-4 bg-slate-50 border-t border-slate-200/80 flex items-center space-x-2 shrink-0">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="px-4 py-3 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-xs transition-colors tap-bounce"
-            >
-              Annulla
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || !!activeConflict}
-              className="flex-1 min-h-[46px] py-3 px-4 bg-teal-700 hover:bg-teal-600 text-white rounded-xl font-black text-xs sm:text-sm transition-all shadow-md shadow-teal-900/20 flex items-center justify-center space-x-2 tap-bounce disabled:opacity-50"
-            >
-              <PlayCircle className="w-4 h-4 shrink-0" />
-              <span className="truncate">{isSubmitting ? 'Avvio...' : buttonLabel}</span>
-            </button>
+          {/* Footer Fisso Sempre Visibile: Allarmi e Pulsanti di Azione */}
+          <div className="p-4 bg-slate-50 border-t border-slate-200/80 space-y-2.5 shrink-0">
+            {/* Banner Errore Sticky Sempre Visibile se presente */}
+            {errorMsg && (
+              <div className="p-2.5 rounded-xl bg-rose-100/90 border border-rose-300 text-rose-900 text-xs flex items-center justify-between animate-in fade-in duration-150">
+                <div className="flex items-center space-x-2 truncate pr-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span className="font-semibold truncate">{errorMsg}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setErrorMsg(null)}
+                  className="text-rose-700 hover:text-rose-900 text-[11px] font-bold px-1.5 py-0.5 rounded-md hover:bg-rose-200 shrink-0"
+                >
+                  Chiudi
+                </button>
+              </div>
+            )}
+
+            {/* Banner Conflitto Sticky se presente */}
+            {activeConflict && !errorMsg && (
+              <div className="p-2.5 rounded-xl bg-amber-100/90 border border-amber-300 text-amber-900 text-xs flex items-center space-x-2 animate-in fade-in duration-150">
+                <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+                <span className="font-semibold truncate">{activeConflict}</span>
+              </div>
+            )}
+
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isSubmitting}
+                className="px-4 py-3 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-xs transition-colors tap-bounce"
+              >
+                Annulla
+              </button>
+
+              <button
+                type="submit"
+                disabled={isSubmitting || (!!activeConflict && !isConflictWithSelf)}
+                className="flex-1 min-h-[46px] py-3 px-4 bg-teal-700 hover:bg-teal-600 active:bg-teal-800 text-white rounded-xl font-black text-xs sm:text-sm transition-all shadow-md shadow-teal-900/20 flex items-center justify-center space-x-2 tap-bounce disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                    <span>Avvio in corso...</span>
+                  </>
+                ) : (
+                  <>
+                    <PlayCircle className="w-4 h-4 shrink-0" />
+                    <span className="truncate">{buttonLabel}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </form>
       </div>

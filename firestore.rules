@@ -61,16 +61,12 @@ service cloud.firestore {
     match /vehicles/{vehicleId} {
       allow get, list: if isSignedIn();
       allow create, delete: if isAdmin();
-      allow update: if isAdmin() || (
-        isSignedIn() &&
+      allow update: if isSignedIn() && (
+        isAdmin() ||
         // Un operatore può aggiornare atomicamente solo lo stato di viaggio e contachilometri
         incoming().diff(existing()).affectedKeys().hasOnly([
           'activeTripId', 'activeDriverId', 'activeDriverName', 'isOccupied', 'currentKm', 'updatedAt'
-        ]) &&
-        incoming().id == existing().id &&
-        incoming().plate == existing().plate &&
-        incoming().name == existing().name &&
-        incoming().status == existing().status
+        ])
       );
     }
 
@@ -113,9 +109,9 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // Global settings
+    // Global settings and version information
     match /appSettings/{settingId} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow write: if isAdmin();
     }
   }

@@ -20,6 +20,8 @@ import { ExpiryAlertsBanner } from './ExpiryAlertsBanner';
 import { getFleetExpiryAlerts } from '../../services/expirationService';
 import { FriendlyVanMascot } from '../common/FriendlyVanMascot';
 import { AndroidAppGuideModal } from '../common/AndroidAppGuideModal';
+import { APP_INFO } from '../../services/appUpdateService';
+import { Info } from 'lucide-react';
 
 interface AdminDashboardProps {
   usages: VehicleUsage[];
@@ -27,6 +29,7 @@ interface AdminDashboardProps {
   requests: CorrectionRequest[];
   onNavigate: (tab: string) => void;
   onSelectUsage: (usage: VehicleUsage) => void;
+  onOpenVersionInfo?: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -35,6 +38,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   requests,
   onNavigate,
   onSelectUsage,
+  onOpenVersionInfo,
 }) => {
   const [androidModalOpen, setAndroidModalOpen] = useState(false);
   const activeTrips = usages.filter(u => u.status === 'in_corso');
@@ -410,6 +414,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           )}
         </div>
+      </div>
+
+      {/* Box Info Versione & Stato Sistema */}
+      <div className="bg-slate-900 rounded-3xl p-5 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-slate-800 shadow-sm">
+        <div className="flex items-center space-x-3.5">
+          <div className="w-10 h-10 rounded-2xl bg-teal-500/20 border border-teal-500/30 flex items-center justify-center text-teal-300">
+            <Info className="w-5 h-5 text-teal-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-white">Stato Installazione ViaggiaBella</span>
+              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-teal-500/30 text-teal-300 border border-teal-400/40">
+                v{APP_INFO.version} (build {APP_INFO.versionCode})
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Build stabile release 30 Ottobre 2026 • Sincronizzazione automatica Cloud Firestore attiva
+            </p>
+          </div>
+        </div>
+
+        {onOpenVersionInfo && (
+          <button
+            type="button"
+            onClick={onOpenVersionInfo}
+            className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-600 text-white font-bold text-xs flex items-center space-x-1.5 transition-all tap-bounce shrink-0"
+          >
+            <span>Dettagli Versione & Piattaforma</span>
+          </button>
+        )}
       </div>
 
       {/* Modale Guida Android & Distribuzione APK */}

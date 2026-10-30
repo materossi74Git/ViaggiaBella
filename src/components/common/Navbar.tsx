@@ -19,11 +19,13 @@ import {
   Smartphone,
   Download,
   RefreshCw,
+  Info,
 } from 'lucide-react';
 import { AppUser } from '../../types';
 import { PWAInstallButton } from './PWAInstallButton';
 import { FriendlyVanMascot } from './FriendlyVanMascot';
 import { AndroidAppGuideModal } from './AndroidAppGuideModal';
+import { APP_INFO } from '../../services/appUpdateService';
 
 interface NavbarProps {
   user: AppUser;
@@ -37,6 +39,7 @@ interface NavbarProps {
   viewMode?: 'operatore' | 'amministratore';
   onToggleViewMode?: (mode: 'operatore' | 'amministratore') => void;
   onCheckUpdates?: () => void;
+  onOpenVersionInfo?: () => void;
   hasUpdatePending?: boolean;
   isCheckingUpdates?: boolean;
 }
@@ -53,6 +56,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   viewMode = user.role,
   onToggleViewMode,
   onCheckUpdates,
+  onOpenVersionInfo,
   hasUpdatePending = false,
   isCheckingUpdates = false,
 }) => {
@@ -72,26 +76,40 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-4">
           {/* ZONA 1: Marchio Cooperativa con Furgoncino stilizzato */}
-          <button
-            type="button"
-            className="flex items-center space-x-3 text-left focus:outline-none tap-bounce shrink-0 group"
-            onClick={() => handleNavClick(isAdminView ? 'admin-dashboard' : 'operator-home')}
-          >
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center shadow-md shadow-teal-900/40 border border-teal-400/30">
-              <FriendlyVanMascot size="sm" mood="idle" className="scale-75 -mt-0.5" />
-            </div>
-            <div>
-              <div className="text-sm font-extrabold tracking-tight text-white flex items-center gap-1.5">
-                <span>ViaggiaBella</span>
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-teal-500/20 text-teal-300 px-1.5 py-0.5 rounded-md border border-teal-500/30">
-                  Clarabella
-                </span>
+          <div className="flex items-center space-x-2 shrink-0">
+            <button
+              type="button"
+              className="flex items-center space-x-3 text-left focus:outline-none tap-bounce shrink-0 group"
+              onClick={() => handleNavClick(isAdminView ? 'admin-dashboard' : 'operator-home')}
+            >
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center shadow-md shadow-teal-900/40 border border-teal-400/30">
+                <FriendlyVanMascot size="sm" mood="idle" className="scale-75 -mt-0.5" />
               </div>
-              <div className="text-[11px] text-slate-400 font-medium">
-                Cooperativa Sociale
+              <div>
+                <div className="text-sm font-extrabold tracking-tight text-white flex items-center gap-1.5">
+                  <span>ViaggiaBella</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-teal-500/20 text-teal-300 px-1.5 py-0.5 rounded-md border border-teal-500/30">
+                    Clarabella
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400 font-medium">
+                  Cooperativa Sociale
+                </div>
               </div>
-            </div>
-          </button>
+            </button>
+
+            {/* Pillola rapida versione installata */}
+            {onOpenVersionInfo && (
+              <button
+                type="button"
+                onClick={onOpenVersionInfo}
+                className="hidden sm:inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-teal-950/70 hover:bg-teal-900 text-teal-300 border border-teal-500/40 text-[10.5px] font-mono font-bold transition-all tap-bounce"
+                title="Tocca per verificare dettagli sulla versione installata"
+              >
+                <span>v{APP_INFO.version}</span>
+              </button>
+            )}
+          </div>
 
           {/* ZONA 2: Link di Navigazione Desktop (Single-line whitespace-nowrap) */}
           <nav className="hidden lg:flex items-center space-x-1 shrink-0">
@@ -233,6 +251,17 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Smartphone className="w-3.5 h-3.5 text-teal-400" />
               <span>App Android</span>
             </button>
+            {onOpenVersionInfo && (
+              <button
+                type="button"
+                onClick={onOpenVersionInfo}
+                className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-mono font-bold transition-all tap-bounce"
+                title="Visualizza dettagli e stato della versione installata"
+              >
+                <Info className="w-3.5 h-3.5 text-teal-400" />
+                <span>v{APP_INFO.version}</span>
+              </button>
+            )}
             {onCheckUpdates && (
               <button
                 type="button"
@@ -524,6 +553,31 @@ export const Navbar: React.FC<NavbarProps> = ({
               <KeyRound className="w-4 h-4 mr-3 text-teal-400" />
               Configura PIN Rapido
             </button>
+
+            {/* Box Informativo Versione Installata per Mobile */}
+            <button
+              type="button"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                if (onOpenVersionInfo) onOpenVersionInfo();
+              }}
+              className="w-full p-3 rounded-2xl bg-slate-800/90 border border-slate-700/80 flex items-center justify-between text-left hover:bg-slate-800 tap-bounce transition-colors"
+            >
+              <div>
+                <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
+                  <Info className="w-3 h-3 text-teal-400" />
+                  <span>Versione Installata</span>
+                </div>
+                <div className="text-xs font-mono font-bold text-teal-300 flex items-center gap-1.5 mt-0.5">
+                  <span>v{APP_INFO.version}</span>
+                  <span className="text-[10px] text-slate-400 font-normal">(build {APP_INFO.versionCode})</span>
+                </div>
+              </div>
+              <span className="px-2 py-1 rounded-lg bg-teal-950 text-teal-300 border border-teal-600/40 text-[11px] font-bold">
+                Dettagli & Info
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={onLogout}

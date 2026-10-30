@@ -13,12 +13,14 @@ import {
   ShieldCheck,
   MapPin,
   ArrowRight,
+  Info,
 } from 'lucide-react';
 import { Vehicle, VehicleUsage, AppUser, AppSettings } from '../../types';
 import { OngoingTripCard } from './OngoingTripCard';
 import { MyUsagesList } from './MyUsagesList';
 import { checkNfcSupport, startNfcScan } from '../../services/nfcService';
 import { FriendlyVanMascot } from '../common/FriendlyVanMascot';
+import { APP_INFO } from '../../services/appUpdateService';
 
 interface OperatorDashboardProps {
   user: AppUser;
@@ -35,6 +37,7 @@ interface OperatorDashboardProps {
   onFinishTripOpen: (usage: VehicleUsage) => void;
   onEditTripOpen: (usage: VehicleUsage) => void;
   onRequestCorrectionOpen: (usage: VehicleUsage) => void;
+  onOpenVersionInfo?: () => void;
 }
 
 export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
@@ -52,6 +55,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
   onFinishTripOpen,
   onEditTripOpen,
   onRequestCorrectionOpen,
+  onOpenVersionInfo,
 }) => {
   const [internalScannedVehicle, setInternalScannedVehicle] = useState<Vehicle | null>(null);
   const [nfcScanning, setNfcScanning] = useState(false);
@@ -497,6 +501,28 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Barra Informativa Stato Versione Installata */}
+      <div className="pt-4 pb-2 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-slate-500">
+        <div className="flex items-center space-x-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>
+            Versione applicazione installata:{' '}
+            <strong className="text-slate-800 font-mono">v{APP_INFO.version}</strong>{' '}
+            <span className="text-[11px] text-slate-400">(build {APP_INFO.versionCode})</span>
+          </span>
+        </div>
+        {onOpenVersionInfo && (
+          <button
+            type="button"
+            onClick={onOpenVersionInfo}
+            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-teal-800 border border-slate-200 font-bold text-xs shadow-2xs transition-all tap-bounce"
+          >
+            <Info className="w-3.5 h-3.5 text-teal-600" />
+            <span>Dettagli Versione & Novità</span>
+          </button>
+        )}
+      </div>
     </div>
   );
 };

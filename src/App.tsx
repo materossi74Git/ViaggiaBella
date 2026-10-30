@@ -34,8 +34,9 @@ import { ToastNotification, ToastMessage } from './components/common/ToastNotifi
 import { FriendlyVanMascot } from './components/common/FriendlyVanMascot';
 import { VehicleIdentifiedActionModal } from './components/common/VehicleIdentifiedActionModal';
 import { NfcWelcomeInstallModal } from './components/common/NfcWelcomeInstallModal';
-import { checkForAppUpdates, RemoteVersionInfo, APP_INFO } from './services/appUpdateService';
+import { checkForAppUpdates, syncAppVersionToFirestore, RemoteVersionInfo, APP_INFO } from './services/appUpdateService';
 import { AppUpdateModal, UpdateModalViewMode } from './components/common/AppUpdateModal';
+import { AppVersionInfoModal } from './components/common/AppVersionInfoModal';
 
 // Componenti Admin
 import { AdminDashboard } from './components/admin/AdminDashboard';
@@ -79,9 +80,10 @@ export default function App() {
   const [targetUsageToEdit, setTargetUsageToEdit] = useState<VehicleUsage | null>(null);
   const [targetUsageForCorrection, setTargetUsageForCorrection] = useState<VehicleUsage | null>(null);
 
-  // Aggiornamenti APK In-App
+  // Aggiornamenti APK In-App & Info Versione
   const [updateInfo, setUpdateInfo] = useState<RemoteVersionInfo | null>(null);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const [versionModalOpen, setVersionModalOpen] = useState(false);
   const [updateModalViewMode, setUpdateModalViewMode] = useState<UpdateModalViewMode>('idle');
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const [lastCheckedAt, setLastCheckedAt] = useState<string>('');
@@ -124,6 +126,7 @@ export default function App() {
           setViewMode(profile.role);
           if (profile.role === 'amministratore') {
             setActiveTab('admin-dashboard');
+            syncAppVersionToFirestore().catch(err => console.warn('Sync version to firestore:', err));
           } else {
             setActiveTab('operator-home');
           }
@@ -404,6 +407,7 @@ export default function App() {
           setActiveTab(mode === 'amministratore' ? 'admin-dashboard' : 'operator-home');
         }}
         onCheckUpdates={handleManualCheckUpdates}
+        onOpenVersionInfo={() => setVersionModalOpen(true)}
         hasUpdatePending={!!updateInfo}
         isCheckingUpdates={isCheckingUpdates}
       />
@@ -422,6 +426,7 @@ export default function App() {
                   setTargetUsageToEdit(u);
                   setUsageFormOpen(true);
                 }}
+                onOpenVersionInfo={() => setVersionModalOpen(true)}
               />
             )}
 
@@ -498,6 +503,7 @@ export default function App() {
                   setTargetUsageForCorrection(u);
                   setCorrectionModalOpen(true);
                 }}
+                onOpenVersionInfo={() => setVersionModalOpen(true)}
               />
             )}
 
@@ -532,6 +538,40 @@ export default function App() {
           </>
         )}
       </main>
+
+      {/* Footer Globale con Indicatore Versione Installata */}
+      <footer className="mt-auto border-t border-slate-200/90 bg-white/80 backdrop-blur-xs py-3 px-4">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+          <div className="flex items-center space-x-2">
+            <FriendlyVanMascot size="sm" mood="idle" className="scale-75 -my-1" />
+            <span className="font-semibold text-slate-700">ViaggiaBella</span>
+            <span>•</span>
+            <span>Cooperativa Sociale Clarabella</span>
+          </div>
+
+          <div className="flex items-center flex-wrap justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => setVersionModalOpen(true)}
+              className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-slate-100 hover:bg-teal-50 hover:text-teal-900 border border-slate-200 text-slate-700 font-mono text-[11px] font-semibold transition-all tap-bounce"
+              title="Tocca per vedere i dettagli e lo stato della versione installata"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Versione: <strong>v{APP_INFO.version}</strong></span>
+              <span className="text-slate-400 font-normal">(build {APP_INFO.versionCode})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleManualCheckUpdates}
+              disabled={isCheckingUpdates}
+              className="text-[11px] text-teal-700 hover:text-teal-800 font-bold underline transition-colors tap-bounce"
+            >
+              {isCheckingUpdates ? 'Verifica...' : 'Verifica aggiornamenti'}
+            </button>
+          </div>
+        </div>
+      </footer>
 
       {/* MODALI APPLICATIVI */}
 
@@ -694,6 +734,14 @@ export default function App() {
             sessionStorage.setItem(`update_dismissed_${updateInfo.versionCode}`, 'true');
           }
         }}
+      />
+
+      {/* 11. Modale Dettagli Versione Installata & Piattaforma */}
+      <AppVersionInfoModal
+        isOpen={versionModalOpen}
+        onClose={() => setVersionModalOpen(false)}
+        onCheckUpdates={handleManualCheckUpdates}
+        isCheckingUpdates={isCheckingUpdates}
       />
 
       {/* Sistema Notifiche Toast */}

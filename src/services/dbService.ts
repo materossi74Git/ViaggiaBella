@@ -37,6 +37,25 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ],
 };
 
+/**
+ * Pulisce ricorsivamente un oggetto per Firestore rimuovendo tutte le chiavi con valore `undefined`.
+ * Questo previene in modo assoluto errori "Unsupported field value: undefined" sia su web che su mobile.
+ */
+export function cleanFirestoreData<T extends Record<string, any>>(obj: T): T {
+  const cleaned: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined) {
+      continue;
+    }
+    if (value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+      cleaned[key] = cleanFirestoreData(value);
+    } else {
+      cleaned[key] = value;
+    }
+  }
+  return cleaned;
+}
+
 // ==========================================
 // AUDIT LOG SERVICE
 // ==========================================
@@ -276,7 +295,7 @@ export async function startTripWithButtons(
   }
 
   const cleanDestination = (destination && destination.trim()) ? destination.trim() : 'Servizio cooperativa';
-  const cleanReason = (reason && reason.trim()) ? reason.trim() : 'Trasporto Utenti';
+  const cleanReason = (reason && reason.trim()) ? reason.trim() : 'Trasporto Utenti e Servizi Educativi';
 
   const now = new Date();
   const usageId = 'usg_' + now.getTime() + '_' + Math.random().toString(36).substring(2, 6);
@@ -301,20 +320,47 @@ export async function startTripWithButtons(
 
       // 2. Controllo stato attivo
       if (vehicleData.status === 'inattivo') {
-        throw new Error(`Il veicolo ${vehicleData.name} (${vehicleData.plate}) risulta disattivato o fuori servizio. Impossibile avviare il viaggio.`);
+        throw new Error(`Il veicolo ${vehicleData.name} (${vehicleData.plate}) risulta disattivato o fuori servizio.`);
       }
 
       // 3. Controllo atomico occupazione veicolo
       if (vehicleData.isOccupied || (vehicleData.activeTripId && vehicleData.activeTripId.trim() !== '')) {
-        const busyBy = vehicleData.activeDriverName || 'un altro operatore';
-        throw new Error(`Attenzione: il mezzo ${vehicleData.name} (${vehicleData.plate}) risulta già impegnato in un viaggio attivo con ${busyBy}. Concludere il viaggio precedente prima di avviarne uno nuovo.`);
+        // Verifica se l'eventuale viaggio registrato esiste davvero ed è effettivamente 'in_corso'
+        let isRealTripActive = true;
+        if (vehicleData.activeTripId) {
+          try {
+            const activeUsageSnap = await transaction.get(doc(db, 'vehicleUsages', vehicleData.activeTripId));
+            if (activeUsageSnap.exists()) {
+              const activeUsageData = activeUsageSnap.data() as VehicleUsage;
+              if (activeUsageData.status !== 'in_corso') {
+                // Il viaggio precedente risulta già concluso nel DB!
+                isRealTripActive = false;
+              }
+            } else {
+              // Documento del viaggio non trovato nel DB (orfano)
+              isRealTripActive = false;
+            }
+          } catch {
+            // Se le regole impediscono la lettura di altri conducenti, ci basiamo sullo stato registrato nel veicolo
+          }
+        }
+
+        if (isRealTripActive) {
+          const busyBy = vehicleData.activeDriverName || 'un altro operatore';
+          const isSameDriver = vehicleData.activeDriverId === driver.uid;
+          if (isSameDriver) {
+            throw new Error(`Attenzione: hai già un viaggio attivo aperto con questo mezzo (${vehicleData.name}). Concludi prima il viaggio in corso.`);
+          } else {
+            throw new Error(`Attenzione: il mezzo ${vehicleData.name} (${vehicleData.plate}) risulta già in uso da ${busyBy}.`);
+          }
+        }
       }
 
       const effectiveStartKm = startKm !== undefined && startKm !== null && !isNaN(startKm)
         ? Math.max(0, startKm)
         : (vehicleData.currentKm || 0);
 
-      const newUsage: VehicleUsage = {
+      const usagePayload: Record<string, any> = {
         id: usageId,
         vehicleId: vehicleData.id,
         vehicleName: vehicleData.name,
@@ -326,8 +372,6 @@ export async function startTripWithButtons(
         destination: cleanDestination,
         reason: cleanReason,
         startKm: effectiveStartKm,
-        startGpsPoint: startGpsPoint || undefined,
-        startLocation: startLocation || undefined,
         notes: notes?.trim() || '',
         status: 'in_corso',
         mode: 'pulsanti',
@@ -338,17 +382,35 @@ export async function startTripWithButtons(
         lastModifiedByName: driver.displayName,
       };
 
-      // 4. Scrittura atomica combinata di viaggio e stato veicolo
-      transaction.set(usageRef, newUsage);
-      transaction.update(vehicleRef, {
-        isOccupied: true,
-        activeTripId: usageId,
-        activeDriverId: driver.uid,
-        activeDriverName: driver.displayName,
-        updatedAt: nowIso,
-      });
+      if (startGpsPoint && startGpsPoint.trim()) {
+        usagePayload.startGpsPoint = startGpsPoint.trim();
+      }
+      if (startLocation && typeof startLocation.latitude === 'number' && typeof startLocation.longitude === 'number') {
+        usagePayload.startLocation = cleanFirestoreData({
+          latitude: startLocation.latitude,
+          longitude: startLocation.longitude,
+          accuracy: startLocation.accuracy,
+          address: startLocation.address,
+          timestamp: startLocation.timestamp || nowIso,
+        });
+      }
 
-      return newUsage;
+      const finalUsageDoc = cleanFirestoreData(usagePayload) as VehicleUsage;
+
+      // 4. Scrittura atomica combinata di viaggio e blocco mezzo
+      transaction.set(usageRef, finalUsageDoc);
+      transaction.update(
+        vehicleRef,
+        cleanFirestoreData({
+          isOccupied: true,
+          activeTripId: usageId,
+          activeDriverId: driver.uid,
+          activeDriverName: driver.displayName,
+          updatedAt: nowIso,
+        })
+      );
+
+      return finalUsageDoc;
     });
 
     await logAuditEvent({
@@ -357,21 +419,50 @@ export async function startTripWithButtons(
       userName: driver.displayName,
       userRole: driver.role,
       actionType: 'creazione',
-      summary: `Inizio viaggio con pulsanti (atomico): ${vehicle.name} (${vehicle.plate}) - Destinazione: ${destination}${startGpsPoint ? ` - GPS Partenza: ${startGpsPoint}` : ''}`,
+      summary: `Inizio viaggio con pulsanti (atomico): ${vehicle.name} (${vehicle.plate}) - Destinazione: ${cleanDestination}${startGpsPoint ? ` - GPS: ${startGpsPoint}` : ''}`,
       newValues: JSON.stringify(createdUsage),
     });
 
     return createdUsage;
   } catch (error: any) {
     if (error?.message && (
-      error.message.includes('risulta già impegnato') ||
+      error.message.includes('risulta già in uso') ||
+      error.message.includes('hai già un viaggio attivo') ||
       error.message.includes('disattivato') ||
-      error.message.includes('non è stato trovato')
+      error.message.includes('non è stato trovato') ||
+      error.message.includes('non autorizzata')
     )) {
       throw error;
     }
     handleFirestoreError(error, OperationType.WRITE, `vehicleUsages/${usageId}`);
   }
+}
+
+/**
+ * Sblocca lo stato di occupazione di un mezzo (es. in caso di viaggio terminato in modo anomalo o disconnessione).
+ */
+export async function forceReleaseVehicleLock(vehicleId: string, user: AppUser): Promise<void> {
+  const vehicleRef = doc(db, 'vehicles', vehicleId);
+  const nowIso = new Date().toISOString();
+  await updateDoc(
+    vehicleRef,
+    cleanFirestoreData({
+      isOccupied: false,
+      activeTripId: null,
+      activeDriverId: null,
+      activeDriverName: null,
+      updatedAt: nowIso,
+    })
+  );
+
+  await logAuditEvent({
+    usageId: 'RESET_' + vehicleId,
+    userId: user.uid,
+    userName: user.displayName,
+    userRole: user.role,
+    actionType: 'correzione_amministrativa',
+    summary: `Sblocco forzato stato occupazione mezzo ${vehicleId}`,
+  });
 }
 
 /**
@@ -456,40 +547,64 @@ export async function finishTripWithButtons(
         throw new Error('Incongruenza tra il veicolo registrato nel viaggio e il veicolo nel database.');
       }
 
-      const completedUsage: VehicleUsage = {
+      const completedUsagePayload: Record<string, any> = {
         ...existingUsage,
         status: 'completato',
         endTime: endTimeStr,
         endRealTimestamp: nowIso,
-        endKm: hasEndKm ? endKm : existingUsage.endKm,
-        distanceKm: distance !== undefined ? distance : existingUsage.distanceKm,
-        endGpsPoint: endGpsPoint || existingUsage.endGpsPoint,
-        endLocation: endLocation || existingUsage.endLocation,
-        destination: destination ? destination.trim() : existingUsage.destination,
-        reason: reason ? reason.trim() : existingUsage.reason,
-        notes: notes !== undefined ? notes.trim() : existingUsage.notes,
+        notes: notes !== undefined ? notes.trim() : (existingUsage.notes || ''),
         firstSavedAt: existingUsage.firstSavedAt || nowIso,
         updatedAt: nowIso,
         lastModifiedBy: user.uid,
         lastModifiedByName: user.displayName,
       };
 
+      if (hasEndKm) {
+        completedUsagePayload.endKm = endKm;
+      }
+      if (distance !== undefined) {
+        completedUsagePayload.distanceKm = distance;
+      }
+      if (endGpsPoint && endGpsPoint.trim()) {
+        completedUsagePayload.endGpsPoint = endGpsPoint.trim();
+      }
+      if (endLocation && typeof endLocation.latitude === 'number' && typeof endLocation.longitude === 'number') {
+        completedUsagePayload.endLocation = cleanFirestoreData({
+          latitude: endLocation.latitude,
+          longitude: endLocation.longitude,
+          accuracy: endLocation.accuracy,
+          address: endLocation.address,
+          timestamp: endLocation.timestamp || nowIso,
+        });
+      }
+      if (destination && destination.trim()) {
+        completedUsagePayload.destination = destination.trim();
+      }
+      if (reason && reason.trim()) {
+        completedUsagePayload.reason = reason.trim();
+      }
+
+      const finalCompletedDoc = cleanFirestoreData(completedUsagePayload) as VehicleUsage;
+
       const newKm = hasEndKm
         ? Math.max(vehicleData.currentKm || 0, endKm)
         : (vehicleData.currentKm || 0);
 
       // 6. Scritture atomiche
-      transaction.set(usageRef, completedUsage);
-      transaction.update(vehicleRef, {
-        currentKm: newKm,
-        isOccupied: false,
-        activeTripId: null,
-        activeDriverId: null,
-        activeDriverName: null,
-        updatedAt: nowIso,
-      });
+      transaction.set(usageRef, finalCompletedDoc);
+      transaction.update(
+        vehicleRef,
+        cleanFirestoreData({
+          currentKm: newKm,
+          isOccupied: false,
+          activeTripId: null,
+          activeDriverId: null,
+          activeDriverName: null,
+          updatedAt: nowIso,
+        })
+      );
 
-      return completedUsage;
+      return finalCompletedDoc;
     });
 
     await logAuditEvent({

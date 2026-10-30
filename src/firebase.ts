@@ -7,17 +7,25 @@ import {
   browserPopupRedirectResolver,
   Auth,
 } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { initializeFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase App
 const app = initializeApp(firebaseConfig);
 
-// Initialize Cloud Firestore using default or specified database ID
-export const db =
+// Initialize Cloud Firestore with ignoreUndefinedProperties to prevent undefined field crashes
+const firestoreDbId =
   firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
-    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-    : getFirestore(app);
+    ? firebaseConfig.firestoreDatabaseId
+    : undefined;
+
+export const db = initializeFirestore(
+  app,
+  {
+    ignoreUndefinedProperties: true,
+  },
+  firestoreDbId
+);
 
 // Initialize Firebase Authentication with robust persistence for PWAs and mobile apps
 let firebaseAuth: Auth;

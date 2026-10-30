@@ -228,16 +228,19 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
               )}
 
               {/* Istruzioni aggiornamento */}
-              <div className="p-3.5 bg-slate-100 rounded-2xl text-[11px] text-slate-600 space-y-1.5">
+              <div className="p-3.5 bg-slate-100 rounded-2xl text-[11px] text-slate-600 space-y-2">
                 <div className="font-bold text-slate-800 flex items-center space-x-1.5">
                   <Smartphone className="w-3.5 h-3.5 text-teal-700" />
                   <span>Come installare l'aggiornamento:</span>
                 </div>
                 <ol className="list-decimal pl-4 space-y-1 text-slate-600">
                   <li>Tocca <strong>"Scarica e Aggiorna Ora"</strong> qui sotto.</li>
-                  <li>Al termine del download, apri la notifica sul telefono.</li>
-                  <li>Android chiederà <em>"Vuoi installare un aggiornamento?"</em>: tocca <strong>Aggiorna</strong>. I tuoi dati e accessi resteranno intatti.</li>
+                  <li>Al termine del download, apri il file scaricato sul telefono.</li>
+                  <li>Android chiederà <em>"Vuoi installare un aggiornamento?"</em>: tocca <strong>Aggiorna</strong>. I tuoi dati resteranno intatti nel cloud.</li>
                 </ol>
+                <div className="pt-1 border-t border-slate-200/80 text-[10.5px] text-amber-800 bg-amber-50/70 p-2 rounded-xl">
+                  <strong>💡 Errore &quot;pacchetto in conflitto&quot;?</strong> Disinstalla prima la vecchia app dal telefono e poi tocca Installa. Nessun dato andrà perso perché viaggi e mezzi sono sincronizzati al sicuro su Firebase!
+                </div>
               </div>
 
               {downloadStarted && (
