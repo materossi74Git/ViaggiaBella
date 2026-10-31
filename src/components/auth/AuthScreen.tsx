@@ -12,6 +12,10 @@ import {
   HelpCircle,
   Copy,
   Check,
+  X,
+  Smartphone,
+  KeyRound,
+  Info,
 } from 'lucide-react';
 import {
   loginWithEmail,
@@ -22,6 +26,7 @@ import {
 } from '../../services/authService';
 import { AppUser } from '../../types';
 import { FriendlyVanMascot } from '../common/FriendlyVanMascot';
+import { Capacitor } from '@capacitor/core';
 
 interface AuthScreenProps {
   onAuthSuccess: (user: AppUser) => void;
@@ -38,6 +43,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
   const [showConsoleGuide, setShowConsoleGuide] = useState(false);
   const [copiedDomain, setCopiedDomain] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showNativeGoogleModal, setShowNativeGoogleModal] = useState(false);
+  const isNativeApp = typeof window !== 'undefined' && Capacitor.isNativePlatform();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,13 +105,28 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
     setErrorMsg(null);
     setInfoMsg(null);
     setShowConsoleGuide(false);
+
+    if (isNativeApp) {
+      setIsSubmitting(false);
+      setShowNativeGoogleModal(true);
+      return;
+    }
+
     try {
       const user = await loginWithGoogle();
       onAuthSuccess(user);
     } catch (err: any) {
       console.error('Errore Google Sign-In:', err);
       const msg = err?.message || String(err);
-      if (msg.includes('auth/unauthorized-domain')) {
+      if (
+        msg.includes('operation-not-supported') ||
+        msg.includes('disallowed_useragent') ||
+        msg.includes('missing-initial-state') ||
+        msg.includes('storage-partitioned') ||
+        msg.includes('sessionStorage')
+      ) {
+        setShowNativeGoogleModal(true);
+      } else if (msg.includes('auth/unauthorized-domain')) {
         const domain = typeof window !== 'undefined' ? window.location.hostname : 'viaggiabella.vercel.app';
         if (!email) {
           setEmail(ADMIN_EMAIL_BOOTSTRAP);
@@ -112,17 +134,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
         setErrorMsg(`Dominio non ancora autorizzato su Firebase: ${domain}`);
       } else if (msg.includes('auth/popup-closed-by-user')) {
         setErrorMsg('Finestra di accesso Google chiusa prima del completamento.');
-      } else if (
-        msg.includes('missing-initial-state') ||
-        msg.includes('storage-partitioned') ||
-        msg.includes('sessionStorage')
-      ) {
-        if (!email) {
-          setEmail(ADMIN_EMAIL_BOOTSTRAP);
-        }
-        setErrorMsg(
-          `Connessione con Google protetta: se il popup non si apre sul tuo dispositivo Android, inserisci la password dell'amministratore (${ADMIN_EMAIL_BOOTSTRAP}) qui sotto o usa "Password dimenticata?".`
-        );
       } else {
         setErrorMsg(msg || 'Accesso con Google annullato o non riuscito.');
       }
@@ -406,6 +417,111 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
           </p>
         </div>
       </div>
+
+      {/* Modal Guida Accesso Google & APK Android */}
+      {showNativeGoogleModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-100 overflow-hidden text-slate-900 animate-in zoom-in-95 duration-200">
+            {/* Header del Modale */}
+            <div className="p-5 bg-gradient-to-r from-teal-900 via-slate-900 to-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center border border-white/20">
+                  <Smartphone className="w-5 h-5 text-teal-300" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white leading-tight">
+                    Accesso Google sull'APK Android
+                  </h3>
+                  <p className="text-xs text-teal-200/80">
+                    Chiarimento tecnico & soluzioni d'accesso
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNativeGoogleModal(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto text-xs">
+              {/* Risposta al dubbio principale */}
+              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200/80 text-amber-950 space-y-1.5">
+                <div className="font-bold flex items-center space-x-1.5 text-amber-900">
+                  <Info className="w-4 h-4 text-amber-700 shrink-0" />
+                  <span>È colpa dell'APK esterno (sideloading)?</span>
+                </div>
+                <p className="text-amber-900 leading-relaxed">
+                  <strong>No!</strong> Android e Google <strong>non bloccano</strong> le app installate da fonti esterne. La causa è che questo APK esegue l'app in una <strong>WebView Android</strong> (browser interno). Google, per policy globale anti-phishing (OAuth RFC 8252), <strong>vieta categoricamente il login web dentro le WebView</strong>.
+                </p>
+              </div>
+
+              {/* Opzione 1: Email + Password + PIN */}
+              <div className="p-4 rounded-2xl bg-teal-50/80 border border-teal-200 text-teal-950 space-y-2.5">
+                <div className="font-bold text-sm text-teal-900 flex items-center space-x-2">
+                  <KeyRound className="w-4 h-4 text-teal-700" />
+                  <span>Soluzione 1 (Immediata nell'APK): Email, Password e PIN</span>
+                </div>
+                <p className="text-slate-700 leading-relaxed">
+                  Puoi accedere all'APK usando la tua email amministratore <strong>{ADMIN_EMAIL_BOOTSTRAP}</strong>. Se non hai ancora creato una password specifica, basta richiederla con un click:
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail(ADMIN_EMAIL_BOOTSTRAP);
+                    setIsResettingPassword(true);
+                    setIsRegistering(false);
+                    setShowNativeGoogleModal(false);
+                    setErrorMsg(null);
+                    setInfoMsg(
+                      `Abbiamo preimpostato la tua email (${ADMIN_EMAIL_BOOTSTRAP}). Clicca su "Invia Link Recupero Password" per scegliere la tua password!`
+                    );
+                  }}
+                  className="w-full py-2.5 px-3 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl flex items-center justify-center space-x-2 shadow-sm transition-all"
+                >
+                  <Mail className="w-4 h-4" />
+                  <span>Imposta Password per {ADMIN_EMAIL_BOOTSTRAP}</span>
+                </button>
+                <div className="p-2.5 bg-white/90 rounded-xl border border-teal-200/60 text-[11px] text-teal-900">
+                  ✨ <strong>Vantaggio per gli Operatori:</strong> una volta fatto il primo accesso, l'app attiva il <strong>PIN rapido a 4 cifre</strong>. Nei viaggi successivi sul furgone non servirà più digitare né password né Google!
+                </div>
+              </div>
+
+              {/* Opzione 2: Web App PWA con 1-click Google */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 space-y-2">
+                <div className="font-bold text-sm text-slate-900 flex items-center space-x-2">
+                  <Sparkles className="w-4 h-4 text-teal-600" />
+                  <span>Soluzione 2 (Se vuoi Google a 1 click): Installa come Web App (PWA)</span>
+                </div>
+                <p className="text-slate-600 leading-relaxed">
+                  Se vuoi continuare a fare login direttamente con il tuo account Google con 1 solo tocco senza password:
+                </p>
+                <ol className="list-decimal pl-4 space-y-1 text-slate-700 font-medium">
+                  <li>Apri il link web dell'app con <strong>Google Chrome</strong> su Android.</li>
+                  <li>Tocca i tre puntini ⋮ in alto a destra oppure il banner in basso.</li>
+                  <li>Seleziona <strong>"Installa applicazione"</strong> (o "Aggiungi a Home").</li>
+                </ol>
+                <p className="text-[11px] text-slate-500 italic">
+                  L'app si apre a tutto schermo come l'APK, ma sfrutta il vero browser Chrome: il pulsante Google funziona istantaneamente.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowNativeGoogleModal(false)}
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs transition-colors"
+              >
+                Ho Capito, Chiudi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
