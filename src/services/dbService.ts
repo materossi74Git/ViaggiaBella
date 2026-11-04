@@ -11,8 +11,10 @@ import {
   orderBy,
   onSnapshot,
   runTransaction,
+  Timestamp,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
+import { getTimestampMillis } from '../utils/timestamp';
 import {
   Vehicle,
   VehicleUsage,
@@ -47,7 +49,14 @@ export function cleanFirestoreData<T extends Record<string, any>>(obj: T): T {
     if (value === undefined) {
       continue;
     }
-    if (value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+    if (
+      value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      !(value instanceof Date) &&
+      !(value instanceof Timestamp) &&
+      typeof (value as any).toMillis !== 'function'
+    ) {
       cleaned[key] = cleanFirestoreData(value);
     } else {
       cleaned[key] = value;
@@ -553,7 +562,7 @@ export async function finishTripWithButtons(
         endTime: endTimeStr,
         endRealTimestamp: nowIso,
         notes: notes !== undefined ? notes.trim() : (existingUsage.notes || ''),
-        firstSavedAt: existingUsage.firstSavedAt || nowIso,
+        firstSavedAt: existingUsage.firstSavedAt || Timestamp.now(),
         updatedAt: nowIso,
         lastModifiedBy: user.uid,
         lastModifiedByName: user.displayName,
@@ -660,8 +669,8 @@ export async function saveManualUsage(
   const distanceKm = endKm !== undefined ? Math.max(0, endKm - startKm) : undefined;
   const isCompleted = !!usage.endTime;
 
-  // Se completato e non ha ancora firstSavedAt, viene impostato ad adesso
-  const firstSavedAt = usage.firstSavedAt || (isCompleted ? nowIso : undefined);
+  // Se completato e non ha ancora firstSavedAt, viene impostato ad adesso come Timestamp nativo
+  const firstSavedAt = usage.firstSavedAt || (isCompleted ? Timestamp.now() : undefined);
 
   const fullUsage: VehicleUsage = {
     id: usageId,
@@ -691,7 +700,7 @@ export async function saveManualUsage(
   };
 
   try {
-    await setDoc(doc(db, 'vehicleUsages', usageId), fullUsage);
+    await setDoc(doc(db, 'vehicleUsages', usageId), cleanFirestoreData(fullUsage));
 
     if (endKm !== undefined && usage.vehicleId) {
       try {
@@ -760,21 +769,23 @@ export async function updateUsageWith30MinRule(
 
     // 2. Se il viaggio era già completato, controlla la finestra dei 30 minuti
     if (existing.status === 'completato' && existing.firstSavedAt) {
-      const firstSavedTime = new Date(existing.firstSavedAt).getTime();
-      const diffMinutes = (now.getTime() - firstSavedTime) / (1000 * 60);
+      const firstSavedTime = getTimestampMillis(existing.firstSavedAt);
+      if (firstSavedTime !== null) {
+        const diffMinutes = (now.getTime() - firstSavedTime) / (1000 * 60);
 
-      if (diffMinutes > 30) {
-        throw new Error(
-          `Finestra di modifica scaduta: sono trascorsi ${Math.round(
-            diffMinutes
-          )} minuti dal primo salvataggio. Le modifiche sono consentite solo per 30 minuti. Invia una richiesta di correzione all'amministratore.`
-        );
+        if (diffMinutes > 30) {
+          throw new Error(
+            `Finestra di modifica scaduta: sono trascorsi ${Math.round(
+              diffMinutes
+            )} minuti dal primo salvataggio. Le modifiche sono consentite solo per 30 minuti. Invia una richiesta di correzione all'amministratore.`
+          );
+        }
       }
     }
   }
 
   // IMPORTANTE: Mantieni inalterato firstSavedAt per impedire il riavvio della finestra!
-  const finalFirstSavedAt = existing.firstSavedAt || updatedUsage.firstSavedAt || nowIso;
+  const finalFirstSavedAt = existing.firstSavedAt ?? updatedUsage.firstSavedAt ?? (updatedUsage.status === 'completato' ? Timestamp.now() : undefined);
 
   const startKm = Number(updatedUsage.startKm) || 0;
   const endKm = updatedUsage.endKm !== undefined && updatedUsage.endKm !== null ? Number(updatedUsage.endKm) : undefined;
@@ -792,7 +803,7 @@ export async function updateUsageWith30MinRule(
   };
 
   try {
-    await setDoc(usageRef, toSave);
+    await setDoc(usageRef, cleanFirestoreData(toSave));
 
     await logAuditEvent({
       usageId: toSave.id,

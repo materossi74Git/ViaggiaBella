@@ -112,7 +112,6 @@ export default function App() {
   // 1. Inizializzazione Auth e Seed iniziale flotta
   useEffect(() => {
     testFirestoreConnection();
-    ensureInitialFleet();
     getAppSettings().then(setSettings);
     checkRedirectAuthResult().catch(err => console.warn('Controllo redirect:', err));
 
@@ -126,6 +125,7 @@ export default function App() {
           setViewMode(profile.role);
           if (profile.role === 'amministratore') {
             setActiveTab('admin-dashboard');
+            ensureInitialFleet().catch(err => console.warn('Inizializzazione flotta:', err));
             syncAppVersionToFirestore().catch(err => console.warn('Sync version to firestore:', err));
           } else {
             setActiveTab('operator-home');

@@ -11,6 +11,7 @@ import {
   Car,
 } from 'lucide-react';
 import { VehicleUsage, AppUser } from '../../types';
+import { isWithin30Minutes, getRemainingMinutes30 } from '../../utils/timestamp';
 
 interface MyUsagesListProps {
   usages: VehicleUsage[];
@@ -35,14 +36,12 @@ export const MyUsagesList: React.FC<MyUsagesListProps> = ({
   const isEditableWithin30Min = (usage: VehicleUsage) => {
     if (usage.status === 'in_corso') return true;
     if (!usage.firstSavedAt) return true;
-    const diffMin = (now - new Date(usage.firstSavedAt).getTime()) / (1000 * 60);
-    return diffMin <= 30;
+    return isWithin30Minutes(usage.firstSavedAt, now);
   };
 
   const getRemainingMinutes = (usage: VehicleUsage) => {
     if (!usage.firstSavedAt) return 30;
-    const diffMin = (now - new Date(usage.firstSavedAt).getTime()) / (1000 * 60);
-    return Math.max(0, Math.ceil(30 - diffMin));
+    return getRemainingMinutes30(usage.firstSavedAt, now);
   };
 
   const filtered = usages.filter(u => {

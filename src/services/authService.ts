@@ -10,11 +10,12 @@ import {
   getRedirectResult,
   User as FirebaseUser,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { AppUser, UserRole } from '../types';
 import { generateSalt, hashPin, verifyPin } from './pinService';
 import { logAuditEvent } from './dbService';
+import { getTimestampMillis } from '../utils/timestamp';
 
 export const ADMIN_EMAIL_BOOTSTRAP = 'materossi74@gmail.com';
 
@@ -239,8 +240,8 @@ export async function attemptPinUnlock(
 
   // Controlla se l'account è temporaneamente bloccato
   if (user.lockUntil) {
-    const lockTime = new Date(user.lockUntil).getTime();
-    if (lockTime > now) {
+    const lockTime = getTimestampMillis(user.lockUntil);
+    if (lockTime !== null && lockTime > now) {
       const waitSeconds = Math.ceil((lockTime - now) / 1000);
       return {
         success: false,
@@ -271,22 +272,22 @@ export async function attemptPinUnlock(
 
   // PIN non corretto: applica ritardi progressivi
   const newFailedAttempts = (user.failedPinAttempts || 0) + 1;
-  let lockUntilIso: string | null = null;
+  let lockUntilTimestamp: Timestamp | null = null;
   let errorMsg = 'PIN non corretto.';
 
   if (newFailedAttempts >= 5) {
     // Blocco per 5 minuti
-    lockUntilIso = new Date(now + 5 * 60 * 1000).toISOString();
+    lockUntilTimestamp = Timestamp.fromMillis(now + 5 * 60 * 1000);
     errorMsg = 'PIN errato per 5 volte consecutive. Account bloccato per 5 minuti.';
   } else if (newFailedAttempts >= 3) {
     // Blocco per 30 secondi
-    lockUntilIso = new Date(now + 30 * 1000).toISOString();
+    lockUntilTimestamp = Timestamp.fromMillis(now + 30 * 1000);
     errorMsg = 'PIN errato per 3 volte. Attendi 30 secondi prima di riprovare.';
   }
 
   await updateDoc(doc(db, 'users', user.uid), {
     failedPinAttempts: newFailedAttempts,
-    lockUntil: lockUntilIso,
+    lockUntil: lockUntilTimestamp,
   }).catch(() => {});
 
   return {

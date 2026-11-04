@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FileEdit, X, AlertTriangle, Clock, Calendar, Gauge, Check } from 'lucide-react';
 import { VehicleUsage, Vehicle, AppUser, AppSettings } from '../../types';
 import { saveManualUsage, updateUsageWith30MinRule } from '../../services/dbService';
+import { getRemainingMinutes30 } from '../../utils/timestamp';
 
 interface UsageFormModalProps {
   isOpen: boolean;
@@ -60,10 +61,8 @@ export const UsageFormModal: React.FC<UsageFormModalProps> = ({
 
       // Calcola tempo rimanente per la modifica
       if (usageToEdit.firstSavedAt && !isAdmin) {
-        const firstTime = new Date(usageToEdit.firstSavedAt).getTime();
         const updateRemaining = () => {
-          const elapsed = (Date.now() - firstTime) / (1000 * 60);
-          const rem = Math.max(0, Math.ceil(30 - elapsed));
+          const rem = getRemainingMinutes30(usageToEdit.firstSavedAt);
           setRemainingMinutes(rem);
         };
         updateRemaining();

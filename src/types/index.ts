@@ -1,3 +1,5 @@
+import type { Timestamp } from 'firebase/firestore';
+
 export type UserRole = 'operatore' | 'amministratore';
 export type UserStatus = 'attivo' | 'revocato';
 
@@ -11,7 +13,7 @@ export interface AppUser {
   pinSalt?: string;
   quickUnlockEnabled?: boolean;
   failedPinAttempts?: number;
-  lockUntil?: string | null;
+  lockUntil?: Timestamp | string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -82,7 +84,7 @@ export interface VehicleUsage {
   mode: UsageMode;
   startRealTimestamp?: string;
   endRealTimestamp?: string;
-  firstSavedAt?: string; // ISO String, base per il conteggio dei 30 minuti di modifica
+  firstSavedAt?: Timestamp | string | null; // Firestore Timestamp nativo (o stringa ISO per retrocompatibilità storica)
   createdAt: string;
   updatedAt: string;
   lastModifiedBy: string;

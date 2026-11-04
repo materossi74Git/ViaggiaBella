@@ -13,7 +13,7 @@ import firebaseConfig from '../firebase-applet-config.json';
 // Initialize Firebase App
 const app = initializeApp(firebaseConfig);
 
-// Initialize Cloud Firestore with ignoreUndefinedProperties to prevent undefined field crashes
+// Initialize Cloud Firestore with experimentalForceLongPolling to avoid 10s WebChannel timeout
 const firestoreDbId =
   firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
     ? firebaseConfig.firestoreDatabaseId
@@ -23,6 +23,7 @@ export const db = initializeFirestore(
   app,
   {
     ignoreUndefinedProperties: true,
+    experimentalAutoDetectLongPolling: true,
   },
   firestoreDbId
 );

@@ -21,7 +21,8 @@ import { getFleetExpiryAlerts } from '../../services/expirationService';
 import { FriendlyVanMascot } from '../common/FriendlyVanMascot';
 import { AndroidAppGuideModal } from '../common/AndroidAppGuideModal';
 import { APP_INFO } from '../../services/appUpdateService';
-import { Info } from 'lucide-react';
+import { Info, Database } from 'lucide-react';
+import { TimestampAuditModal } from './TimestampAuditModal';
 
 interface AdminDashboardProps {
   usages: VehicleUsage[];
@@ -41,6 +42,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onOpenVersionInfo,
 }) => {
   const [androidModalOpen, setAndroidModalOpen] = useState(false);
+  const [timestampAuditOpen, setTimestampAuditOpen] = useState(false);
   const activeTrips = usages.filter(u => u.status === 'in_corso');
   const pendingRequests = requests.filter(r => r.status === 'in_attesa');
 
@@ -435,16 +437,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
 
-        {onOpenVersionInfo && (
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={onOpenVersionInfo}
-            className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-600 text-white font-bold text-xs flex items-center space-x-1.5 transition-all tap-bounce shrink-0"
+            onClick={() => setTimestampAuditOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 border border-slate-700 font-bold text-xs flex items-center space-x-1.5 transition-all tap-bounce"
+            title="Esegui audit di sola lettura sulla conformità dei timestamp dei viaggi e dei veicoli"
           >
-            <span>Dettagli Versione & Piattaforma</span>
+            <Database className="w-3.5 h-3.5 text-teal-400" />
+            <span>Audit Timestamp</span>
           </button>
-        )}
+          {onOpenVersionInfo && (
+            <button
+              type="button"
+              onClick={onOpenVersionInfo}
+              className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-600 text-white font-bold text-xs flex items-center space-x-1.5 transition-all tap-bounce shrink-0"
+            >
+              <span>Dettagli Versione & Piattaforma</span>
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Modale Diagnostica e Audit Timestamp (Sola Lettura) */}
+      <TimestampAuditModal
+        isOpen={timestampAuditOpen}
+        onClose={() => setTimestampAuditOpen(false)}
+        usages={usages}
+        vehicles={vehicles}
+      />
 
       {/* Modale Guida Android & Distribuzione APK */}
       <AndroidAppGuideModal

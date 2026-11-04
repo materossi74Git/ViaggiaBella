@@ -1,10 +1,151 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" rx="128" fill="#1e3a8a"/>
-  <rect x="32" y="32" width="448" height="448" rx="96" fill="#2563eb"/>
-  <path d="M394 336H426C433.7 336 440 329.7 440 322V274C440 259.6 428.8 246.8 416 243.6L370 232L340 180C332 166.4 317.6 158 302 158H146C130.4 158 116 166.4 108 180L78 232L32 243.6C19.2 246.8 8 259.6 8 274V322C8 329.7 14.3 336 22 336H54" stroke="#ffffff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" transform="translate(32, 20)"/>
-  <circle cx="160" cy="356" r="44" fill="#ffffff"/>
-  <circle cx="160" cy="356" r="20" fill="#1e3a8a"/>
-  <circle cx="352" cy="356" r="44" fill="#ffffff"/>
-  <circle cx="352" cy="356" r="20" fill="#1e3a8a"/>
-  <path d="M204 356H308" stroke="#ffffff" stroke-width="28" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" fill="none">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#0f766e"/>
+      <stop offset="100%" stop-color="#042f2e"/>
+    </linearGradient>
+
+    <!-- Inner Glow/Highlight Gradient -->
+    <linearGradient id="highlight-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.0"/>
+    </linearGradient>
+
+    <!-- Van Body Gradient -->
+    <linearGradient id="van-body-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2dd4bf"/>
+      <stop offset="35%" stop-color="#0f766e"/>
+      <stop offset="100%" stop-color="#115e59"/>
+    </linearGradient>
+
+    <!-- Van Glass Gradient -->
+    <linearGradient id="van-glass-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f0fdfa"/>
+      <stop offset="40%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+
+    <!-- Headlight Beam Gradient -->
+    <linearGradient id="beam-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Subtle Drop Shadow filter for depth -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#022c22" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Base Icon Background (Squircle) -->
+  <rect width="512" height="512" rx="112" fill="url(#bg-grad)"/>
+
+  <!-- Subtle Top Highlight Border -->
+  <rect x="6" y="6" width="500" height="500" rx="106" fill="none" stroke="url(#highlight-grad)" stroke-width="4"/>
+
+  <!-- Decorative Subtle Radial Grid Circles -->
+  <circle cx="256" cy="256" r="210" fill="none" stroke="#2dd4bf" stroke-opacity="0.08" stroke-width="2"/>
+  <circle cx="256" cy="256" r="160" fill="none" stroke="#2dd4bf" stroke-opacity="0.05" stroke-width="2"/>
+
+  <!-- Main Content Group (Van Mascot scaled & centered) -->
+  <g transform="translate(46, 76) scale(2.625)" filter="url(#shadow)">
+    
+    <!-- Headlight Beam -->
+    <polygon points="144,66 172,52 172,86 144,76" fill="url(#beam-grad)"/>
+
+    <!-- Ground Shadow -->
+    <ellipse cx="82" cy="85" rx="68" ry="6" fill="#022c22" opacity="0.6"/>
+
+    <!-- Main Van Body -->
+    <path d="M 32 82 
+             L 32 38 
+             Q 32 26 44 26 
+             L 112 26 
+             Q 122 26 128 34 
+             L 142 54 
+             Q 148 62 148 70 
+             L 148 82 
+             Q 148 85 145 85 
+             L 132 85 
+             Q 128 85 128 80 
+             A 16 16 0 0 0 96 80 
+             Q 96 85 92 85 
+             L 64 85 
+             Q 60 85 60 80 
+             A 16 16 0 0 0 28 80 
+             Q 28 85 24 85 
+             L 19 85 
+             Q 16 85 16 82 
+             Z"
+          fill="url(#van-body-grad)"
+          stroke="#042f2e"
+          stroke-width="2.5"
+          stroke-linejoin="round"/>
+
+    <!-- White Belly Stripe -->
+    <path d="M 18 64 L 148 64 L 148 70 L 18 70 Z" fill="#ffffff" opacity="0.95"/>
+    <path d="M 18 70 L 148 70" stroke="#0d9488" stroke-width="1.5"/>
+
+    <!-- Cooperative Leaf Badge on Van Door -->
+    <g transform="translate(68, 46)">
+      <circle cx="10" cy="10" r="9" fill="#ffffff" stroke="#0d9488" stroke-width="1.5"/>
+      <path d="M 10 15 C 6.5 12.5 5.5 9 10 5.5 C 14.5 9 13.5 12.5 10 15 Z" fill="#0f766e"/>
+      <path d="M 10 15 C 12 12.5 14 9 11 6.8" stroke="#5eead4" stroke-width="1.2" stroke-linecap="round"/>
+    </g>
+
+    <!-- Windshield -->
+    <path d="M 116 32 L 127 34 L 140 54 L 116 54 Z"
+          fill="url(#van-glass-grad)"
+          stroke="#0f172a"
+          stroke-width="2"
+          stroke-linejoin="round"/>
+    <path d="M 125 36 L 134 52" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
+
+    <!-- Passenger Window -->
+    <path d="M 90 32 L 111 32 L 111 54 L 90 54 Z"
+          fill="url(#van-glass-grad)"
+          stroke="#0f172a"
+          stroke-width="2"
+          stroke-linejoin="round"/>
+
+    <!-- Rear Window -->
+    <path d="M 40 32 L 85 32 L 85 54 L 40 54 Q 37 54 37 50 L 37 36 Q 37 32 40 32 Z"
+          fill="url(#van-glass-grad)"
+          stroke="#0f172a"
+          stroke-width="2"
+          stroke-linejoin="round"/>
+
+    <!-- Rearview Mirror -->
+    <rect x="112" y="52" width="5" height="7" rx="2.5" fill="#0f766e" stroke="#042f2e" stroke-width="1.5"/>
+
+    <!-- Headlight (Friendly Glowing Eye) -->
+    <rect x="142" y="66" width="6" height="10" rx="3" fill="#38bdf8" stroke="#0f172a" stroke-width="1.8"/>
+    <circle cx="145" cy="70" r="1.8" fill="#ffffff"/>
+
+    <!-- Taillight -->
+    <rect x="16" y="66" width="4" height="9" rx="2" fill="#f43f5e" stroke="#0f172a" stroke-width="1.5"/>
+
+    <!-- Bumper -->
+    <path d="M 144 80 Q 149 81 149 84 L 140 84 Q 140 80 144 80 Z" fill="#334155" stroke="#0f172a" stroke-width="1.5"/>
+
+    <!-- Back Wheel -->
+    <g transform="translate(44, 80)">
+      <circle cx="0" cy="0" r="13" fill="#1e293b" stroke="#0f172a" stroke-width="2.5"/>
+      <circle cx="0" cy="0" r="7.5" fill="#f8fafc" stroke="#0f766e" stroke-width="2"/>
+      <circle cx="0" cy="0" r="3" fill="#0f766e"/>
+    </g>
+
+    <!-- Front Wheel -->
+    <g transform="translate(112, 80)">
+      <circle cx="0" cy="0" r="13" fill="#1e293b" stroke="#0f172a" stroke-width="2.5"/>
+      <circle cx="0" cy="0" r="7.5" fill="#f8fafc" stroke="#0f766e" stroke-width="2"/>
+      <circle cx="0" cy="0" r="3" fill="#0f766e"/>
+    </g>
+  </g>
+
+  <!-- Sparkling Star Accents in Corner for App Polish -->
+  <path d="M 410 90 L 413 102 L 425 105 L 413 108 L 410 120 L 407 108 L 395 105 L 407 102 Z" fill="#5eead4" opacity="0.9"/>
+  <path d="M 370 65 L 372 73 L 380 75 L 372 77 L 370 85 L 368 77 L 360 75 L 368 73 Z" fill="#38bdf8" opacity="0.7"/>
 </svg>

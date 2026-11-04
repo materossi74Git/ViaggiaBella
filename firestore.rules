@@ -19,7 +19,7 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && (
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        request.auth.token.email == 'materossi74@gmail.com'
+        ('email' in request.auth.token && request.auth.token.email == 'materossi74@gmail.com')
       );
     }
 
@@ -33,6 +33,20 @@ service cloud.firestore {
 
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isWithin30Minutes(savedAt) {
+      return savedAt != null && (
+        (savedAt is timestamp && request.time < savedAt + duration.value(30, 'm')) ||
+        (savedAt is number && request.time.toMillis() < savedAt + 1800000)
+      );
+    }
+
+    function isLockoutActive(lockUntilVal) {
+      return lockUntilVal != null && (
+        (lockUntilVal is timestamp && request.time < lockUntilVal) ||
+        (lockUntilVal is number && request.time.toMillis() < lockUntilVal)
+      );
     }
 
     // Admins registry
@@ -49,11 +63,18 @@ service cloud.firestore {
         (!('role' in incoming()) || incoming().role == 'operatore' || isAdmin()) &&
         (!('status' in incoming()) || incoming().status == 'attivo' || isAdmin())
       );
-      allow update: if (
+      allow update: if isAdmin() || (
         isUser(userId) &&
         incoming().role == existing().role &&
-        incoming().status == existing().status
-      ) || isAdmin();
+        incoming().status == existing().status &&
+        // Protezione Lockout PIN: se l'account è attualmente bloccato, l'utente non può azzerare lockUntil
+        // prima che il blocco sia scaduto
+        (
+          !('lockUntil' in existing()) ||
+          !isLockoutActive(existing().lockUntil) ||
+          incoming().lockUntil == existing().lockUntil
+        )
+      );
       allow delete: if isAdmin();
     }
 
@@ -62,11 +83,35 @@ service cloud.firestore {
       allow get, list: if isSignedIn();
       allow create, delete: if isAdmin();
       allow update: if isSignedIn() && (
-        isAdmin() ||
-        // Un operatore può aggiornare atomicamente solo lo stato di viaggio e contachilometri
-        incoming().diff(existing()).affectedKeys().hasOnly([
-          'activeTripId', 'activeDriverId', 'activeDriverName', 'isOccupied', 'currentKm', 'updatedAt'
-        ])
+        isAdmin() || (
+          // Un operatore può aggiornare solo i campi legati all'utilizzo operativo
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'activeTripId', 'activeDriverId', 'activeDriverName', 'activeTripStartTime', 'isOccupied', 'currentKm', 'updatedAt'
+          ]) && (
+            // CASO 1: Avvio legittimo del viaggio su mezzo libero
+            (
+              (existing().isOccupied == false || !('isOccupied' in existing())) &&
+              incoming().isOccupied == true &&
+              incoming().activeDriverId == request.auth.uid &&
+              incoming().activeTripId is string &&
+              incoming().currentKm >= existing().currentKm
+            ) ||
+            // CASO 2: Conclusione legittima del viaggio / rilascio mezzo da parte dell'autista in carico
+            (
+              existing().activeDriverId == request.auth.uid &&
+              incoming().isOccupied == false &&
+              incoming().activeTripId == null &&
+              incoming().activeDriverId == null &&
+              incoming().activeDriverName == null &&
+              incoming().currentKm >= existing().currentKm
+            ) ||
+            // CASO 3: Aggiornamento contachilometri (es. registrazione manuale retroattiva)
+            (
+              incoming().diff(existing()).affectedKeys().hasOnly(['currentKm', 'updatedAt']) &&
+              incoming().currentKm >= existing().currentKm
+            )
+          )
+        )
       );
     }
 
@@ -81,12 +126,16 @@ service cloud.firestore {
           existing().driverId == request.auth.uid &&
           incoming().driverId == existing().driverId &&
           (
+            // 1. Viaggio ancora in corso: aggiornabile e concludibile in qualsiasi momento (anche dopo ore o giorni)
             existing().status == 'in_corso' ||
-            // Se primo salvataggio non esiste o finestra di 30 minuti ancora aperta
-            !('firstSavedAt' in existing()) ||
-            existing().firstSavedAt == null ||
-            // Permetti aggiornamento solo se firstSavedAt rimane immutabile
-            incoming().firstSavedAt == existing().firstSavedAt
+            // 2. Viaggio completato: modificabile solo entro 30 minuti dal primo salvataggio definitivo
+            (
+              existing().status == 'completato' &&
+              // firstSavedAt deve rimanere immutabile (non può essere azzerato o prorogato)
+              incoming().firstSavedAt == existing().firstSavedAt &&
+              // Controllo temporale server-side: request.time < firstSavedAt + 30 minuti
+              isWithin30Minutes(existing().firstSavedAt)
+            )
           )
         )
       );
@@ -98,7 +147,12 @@ service cloud.firestore {
       allow get: if isSignedIn() && (existing().driverId == request.auth.uid || isAdmin());
       // Gli operatori possono visualizzare in elenco solo le proprie richieste; gli admin tutte
       allow list: if isAdmin() || (isSignedIn() && resource.data.driverId == request.auth.uid);
-      allow create: if isSignedIn() && (incoming().driverId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && (
+        isAdmin() || (
+          incoming().driverId == request.auth.uid &&
+          incoming().status == 'in_attesa'
+        )
+      );
       allow update, delete: if isAdmin();
     }
 
@@ -113,6 +167,11 @@ service cloud.firestore {
     match /appSettings/{settingId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // Health check / probe di connessione (mandated by Firebase guidelines)
+    match /test/{testId} {
+      allow read: if true;
     }
   }
 }

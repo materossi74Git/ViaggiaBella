@@ -6,6 +6,18 @@ import {
   OFFICIAL_DOMAIN,
 } from '../services/nfcService';
 import { Vehicle, VehicleUsage, AppUser } from '../types';
+import { Timestamp } from 'firebase/firestore';
+import { cleanFirestoreData } from '../services/dbService';
+import {
+  getTimestampMillis,
+  formatTimestampForDisplay,
+  formatTimestampToIso,
+  isWithin30Minutes,
+  getRemainingMinutes30,
+  isLockActive,
+  getRemainingLockSeconds,
+  toFirestoreTimestamp,
+} from '../utils/timestamp';
 
 describe('Audit Tecnico ViaggiaBella - Suite di Test di Conformità', () => {
   const mockVehicles: Vehicle[] = [
@@ -594,5 +606,97 @@ describe('Audit Tecnico ViaggiaBella - Suite di Test di Conformità', () => {
       : 'La versione corrente è già aggiornata';
     expect(statusMessage).toBe('Trovato nuovo aggiornamento disponibile');
   });
+
+  // SCENARIO 23: Retrocompatibilità e normalizzazione di firstSavedAt
+  it('Scenario 23: Normalizzazione di firstSavedAt con Timestamp nativi, stringhe ISO ed Epoch ms', () => {
+    const nowMs = 1761928000000;
+    const tsNative = Timestamp.fromMillis(nowMs);
+    const isoString = new Date(nowMs).toISOString();
+    const epochNum = nowMs;
+
+    // Estrazione corretta dei millisecondi da ciascuna forma
+    expect(getTimestampMillis(tsNative)).toBe(nowMs);
+    expect(getTimestampMillis(isoString)).toBe(nowMs);
+    expect(getTimestampMillis(epochNum)).toBe(nowMs);
+    expect(getTimestampMillis(null)).toBeNull();
+    expect(getTimestampMillis(undefined)).toBeNull();
+
+    // Formattazione per la UI (mai un crash o "[object Object]")
+    const formattedFromTs = formatTimestampForDisplay(tsNative);
+    const formattedFromIso = formatTimestampForDisplay(isoString);
+    expect(formattedFromTs).not.toBe('[object Object]');
+    expect(formattedFromTs).toContain('2025'); // o 2026 a seconda dell'anno
+    expect(formatTimestampForDisplay(null)).toBe('-');
+    expect(formatTimestampForDisplay(undefined)).toBe('-');
+
+    // Conversione a Timestamp nativo
+    expect(toFirestoreTimestamp(tsNative)).toBe(tsNative);
+    expect(toFirestoreTimestamp(isoString)?.toMillis()).toBe(nowMs);
+  });
+
+  // SCENARIO 24: Calcolo client-side della regola dei 30 minuti (Timestamp vs ISO string)
+  it('Scenario 24: Calcolo client-side dei 30 minuti e minuti rimanenti con Timestamp e ISO', () => {
+    const refNow = 1761930000000;
+    const tenMinAgoTs = Timestamp.fromMillis(refNow - 10 * 60 * 1000);
+    const tenMinAgoIso = new Date(refNow - 10 * 60 * 1000).toISOString();
+    const thirtyFiveMinAgoTs = Timestamp.fromMillis(refNow - 35 * 60 * 1000);
+    const thirtyFiveMinAgoIso = new Date(refNow - 35 * 60 * 1000).toISOString();
+
+    // Entro 30 minuti
+    expect(isWithin30Minutes(tenMinAgoTs, refNow)).toBe(true);
+    expect(isWithin30Minutes(tenMinAgoIso, refNow)).toBe(true);
+    expect(getRemainingMinutes30(tenMinAgoTs, refNow)).toBe(20);
+    expect(getRemainingMinutes30(tenMinAgoIso, refNow)).toBe(20);
+
+    // Oltre 30 minuti
+    expect(isWithin30Minutes(thirtyFiveMinAgoTs, refNow)).toBe(false);
+    expect(isWithin30Minutes(thirtyFiveMinAgoIso, refNow)).toBe(false);
+    expect(getRemainingMinutes30(thirtyFiveMinAgoTs, refNow)).toBe(0);
+    expect(getRemainingMinutes30(thirtyFiveMinAgoIso, refNow)).toBe(0);
+
+    // Senza firstSavedAt (non ancora completato o prima scrittura)
+    expect(isWithin30Minutes(undefined, refNow)).toBe(true);
+    expect(getRemainingMinutes30(undefined, refNow)).toBe(30);
+  });
+
+  // SCENARIO 25: Blocco PIN e countdown temporale (lockUntil con Timestamp nativo vs ISO)
+  it('Scenario 25: Gestione lockout PIN con Timestamp Firestore nativo e ISO pregresso', () => {
+    const refNow = 1761930000000;
+    const futureLockTs = Timestamp.fromMillis(refNow + 45 * 1000); // 45 sec nel futuro
+    const futureLockIso = new Date(refNow + 45 * 1000).toISOString();
+    const pastLockTs = Timestamp.fromMillis(refNow - 10 * 1000); // Scaduto 10 sec fa
+
+    expect(isLockActive(futureLockTs, refNow)).toBe(true);
+    expect(isLockActive(futureLockIso, refNow)).toBe(true);
+    expect(isLockActive(pastLockTs, refNow)).toBe(false);
+    expect(isLockActive(null, refNow)).toBe(false);
+
+    expect(getRemainingLockSeconds(futureLockTs, refNow)).toBe(45);
+    expect(getRemainingLockSeconds(futureLockIso, refNow)).toBe(45);
+    expect(getRemainingLockSeconds(pastLockTs, refNow)).toBe(0);
+  });
+
+  // SCENARIO 26: cleanFirestoreData preserva Timestamp nativi
+  it('Scenario 26: cleanFirestoreData pulisce undefined ma mantiene intatte le istanze di Timestamp Firestore', () => {
+    const nowTs = Timestamp.now();
+    const testDoc = {
+      id: 'test_1',
+      firstSavedAt: nowTs,
+      status: 'completato',
+      optionalUndefined: undefined,
+      nested: {
+        value: 123,
+        nestedUndefined: undefined,
+      },
+    };
+
+    const cleaned = cleanFirestoreData(testDoc);
+    expect(cleaned.optionalUndefined).toBeUndefined();
+    expect(cleaned.nested.nestedUndefined).toBeUndefined();
+    expect(cleaned.firstSavedAt).toBe(nowTs);
+    expect(cleaned.firstSavedAt instanceof Timestamp).toBe(true);
+    expect(typeof cleaned.firstSavedAt.toMillis).toBe('function');
+  });
 });
+
 

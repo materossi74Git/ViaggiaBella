@@ -15,6 +15,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { VehicleUsage, Vehicle, AppUser } from '../../types';
+import { formatTimestampForDisplay } from '../../utils/timestamp';
 
 interface UsagesTableProps {
   usages: VehicleUsage[];
@@ -388,7 +389,7 @@ export const UsagesTable: React.FC<UsagesTableProps> = ({
                   <div>• Fine effettiva (pulsante): {selectedUsage.endRealTimestamp}</div>
                 )}
                 {selectedUsage.firstSavedAt && (
-                  <div>• Primo salvataggio definitivo: {selectedUsage.firstSavedAt}</div>
+                  <div>• Primo salvataggio definitivo: {formatTimestampForDisplay(selectedUsage.firstSavedAt)}</div>
                 )}
                 <div>• Creato il: {selectedUsage.createdAt}</div>
                 <div>• Ultima modifica: {selectedUsage.updatedAt} da {selectedUsage.lastModifiedByName}</div>

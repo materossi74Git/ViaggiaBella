@@ -3,6 +3,7 @@ import { Lock, Fingerprint, Delete, AlertCircle, LogOut } from 'lucide-react';
 import { AppUser } from '../../types';
 import { attemptPinUnlock, logoutUser } from '../../services/authService';
 import { isBiometricsAvailable } from '../../services/pinService';
+import { getRemainingLockSeconds } from '../../utils/timestamp';
 
 interface PinModalProps {
   user: AppUser;
@@ -25,7 +26,7 @@ export const PinModal: React.FC<PinModalProps> = ({ user, onSuccess, onFullLogou
   useEffect(() => {
     if (user.lockUntil) {
       const updateCountdown = () => {
-        const remaining = Math.max(0, Math.ceil((new Date(user.lockUntil!).getTime() - Date.now()) / 1000));
+        const remaining = getRemainingLockSeconds(user.lockUntil);
         setLockCountdown(remaining > 0 ? remaining : null);
       };
       updateCountdown();
